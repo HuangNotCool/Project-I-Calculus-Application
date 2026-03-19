@@ -1,0 +1,110 @@
+/* Tông màu chủ đạo giống các trang E-learning */
+:root {
+    --primary-blue: #0056d2;
+    --accent-orange: #ff7800;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f5f7;
+}
+
+/* Tùy chỉnh thanh Menu */
+.navbar-custom {
+    background-color: white !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+.navbar-custom .navbar-brand {
+    color: var(--primary-blue) !important;
+    font-size: 1.5rem;
+}
+.navbar-custom .nav-link {
+    color: #333 !important;
+    font-weight: 500;
+}
+.navbar-custom .nav-link:hover {
+    color: var(--primary-blue) !important;
+}
+.btn-login {
+    color: var(--primary-blue);
+    border: 1px solid var(--primary-blue);
+}
+.btn-login:hover {
+    background-color: var(--primary-blue);
+    color: white;
+}
+.btn-register {
+    background-color: var(--accent-orange);
+    color: white;
+    border: none;
+}
+.btn-register:hover {
+    background-color: #e06900;
+    color: white;
+}
+
+/* Khu vực Banner chính (Hero Section) */
+.hero-section {
+    background: linear-gradient(135deg, #0056d2 0%, #00a1ff 100%);
+    color: white;
+    padding: 80px 0;
+    border-radius: 0 0 50px 50px;
+    margin-bottom: 40px;
+}
+
+/* Thẻ tính năng (Giống hiển thị khóa học) */
+.feature-card {
+    transition: transform 0.3s, box-shadow 0.3s;
+    border: none;
+    border-radius: 12px;
+}
+.feature-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+}
+.feature-icon {
+    font-size: 3rem;
+    color: var(--accent-orange);
+    margin-bottom: 15px;
+}
+
+/* --- CẤU HÌNH GIAO DIỆN DARK MODE --- */
+[data-bs-theme="dark"] body {
+    background-color: #121212;
+}
+
+/* Đổi màu thanh Menu trong Dark Mode */
+[data-bs-theme="dark"] .navbar-custom {
+    background-color: #1e1e1e !important;
+    box-shadow: 0 2px 10px rgba(255,255,255,0.05);
+}
+[data-bs-theme="dark"] .navbar-custom .nav-link {
+    color: #e0e0e0 !important;
+}
+[data-bs-theme="dark"] .navbar-custom .nav-link:hover {
+    color: var(--accent-orange) !important;
+}
+
+/* Đổi màu các thẻ tính năng (feature-card) và form đăng nhập */
+[data-bs-theme="dark"] .feature-card,
+[data-bs-theme="dark"] .card {
+    background-color: #1e1e1e;
+    border: 1px solid #333;
+    color: #e0e0e0;
+}
+[data-bs-theme="dark"] .card-header {
+    border-bottom: 1px solid #333;
+}
+[data-bs-theme="dark"] .feature-card h4, 
+[data-bs-theme="dark"] .feature-card h5 {
+    color: #ffffff;
+}
+[data-bs-theme="dark"] .text-muted {
+    color: #a0a0a0 !important;
+}
+
+/* Làm tối Footer */
+[data-bs-theme="dark"] footer {
+    background-color: #0a0a0a !important;
+    border-top: 1px solid #222;
+}

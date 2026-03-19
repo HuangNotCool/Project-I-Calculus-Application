@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero-section text-center" data-aos="fade-down">
+    <div class="container">
+        <h1 class="display-4 fw-bold mb-3">Nền Tảng Ôn Luyện Giải Tích I Hàng Đầu</h1>
+        <p class="lead mb-4">Dành riêng cho sinh viên Đại học Bách Khoa. Học tập thông minh, vượt qua kỳ thi dễ dàng.</p>
+{% if current_user.is_authenticated and current_user.role == 'student' %}
+            <a href="/student-dashboard" class="btn btn-register btn-lg px-5 rounded-pill shadow">Vào lớp học ngay</a>
+        {% elif current_user.is_authenticated and current_user.role == 'teacher' %}
+            <a href="/teacher-dashboard" class="btn btn-register btn-lg px-5 rounded-pill shadow">Vào trang quản lý</a>
+        {% else %}
+            <a href="/register" class="btn btn-register btn-lg px-5 rounded-pill shadow">Bắt đầu học miễn phí</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="container mt-5">
+    <h2 class="text-center fw-bold mb-5" style="color: var(--primary-blue);" data-aos="fade-up">Tính Năng Nổi Bật</h2>
+    
+    <div class="row g-4">
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="card feature-card h-100 p-4 text-center">
+                <i class="fa-solid fa-laptop-code feature-icon"></i>
+                <h4 class="fw-bold">Thi Trắc Nghiệm Online</h4>
+                <p class="text-muted">Hệ thống câu hỏi sát với đề cương Bách Khoa. Làm bài và chấm điểm ngay lập tức.</p>
+                <a href="/login" class="btn btn-outline-primary mt-auto rounded-pill">Vào phòng thi</a>
+            </div>
+        </div>
+
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="200">
+            <div class="card feature-card h-100 p-4 text-center">
+                <i class="fa-solid fa-file-pdf feature-icon"></i>
+                <h4 class="fw-bold">Sinh Đề Tự Động</h4>
+                <p class="text-muted">1 click để tạo đề thi ngẫu nhiên từ ngân hàng câu hỏi, xuất trực tiếp ra file.</p>
+                <a href="/login" class="btn btn-outline-primary mt-auto rounded-pill">Công cụ Giáo viên</a>
+            </div>
+        </div>
+
+        <div class="col-md-4" data-aos="fade-up" data-aos-delay="300">
+            <div class="card feature-card h-100 p-4 text-center">
+                <i class="fa-solid fa-chart-line feature-icon"></i>
+                <h4 class="fw-bold">Theo Dõi Tiến Độ</h4>
+                <p class="text-muted">Phân tích điểm số qua từng bài test. Chỉ ra các điểm mà sinh viên cần cải thiện.</p>
+                <a href="/register" class="btn btn-outline-primary mt-auto rounded-pill">Xem chi tiết</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

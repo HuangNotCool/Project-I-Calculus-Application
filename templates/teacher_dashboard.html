@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="text-center mt-5">
+    <h2 class="text-success">Chào mừng Giảng viên: {{ current_user.username }}</h2>
+    <p>Đây là khu vực riêng để thiết lập đề thi Giải tích 1 và xuất file LaTeX.</p>
+    <a href="/logout" class="btn btn-danger mt-3">Đăng xuất</a>
+</div>
+{% endblock %}

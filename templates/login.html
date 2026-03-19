@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow border-0 rounded-3">
+            <div class="card-header bg-primary text-white text-center py-3">
+                <h4 class="mb-0">Đăng Nhập Hệ Thống</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="/login">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tên đăng nhập / Mã SV</label>
+                        <input type="text" class="form-control" name="username" placeholder="Nhập tài khoản..." required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Mật khẩu</label>
+                        <input type="password" class="form-control" name="password" placeholder="Nhập mật khẩu..." required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2">Đăng Nhập</button>
+                </form>
+                <div class="text-center mt-3">
+                    <span class="text-muted">Chưa có tài khoản?</span> <a href="/register" class="text-decoration-none">Đăng ký ngay</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

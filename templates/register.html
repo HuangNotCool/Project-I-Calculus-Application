@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-5">
+        <div class="card shadow border-0 rounded-3">
+            <div class="card-header bg-success text-white text-center py-3">
+                <h4 class="mb-0">Đăng Ký Tài Khoản Mới</h4>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="/register">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Tên đăng nhập / Mã SV</label>
+                        <input type="text" class="form-control" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Mật khẩu</label>
+                        <input type="password" class="form-control" name="password" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Bạn là:</label>
+                        <select class="form-select" name="role">
+                            <option value="student">Sinh viên </option>
+                            <option value="teacher">Giảng viên</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 py-2">Tạo Tài Khoản</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
