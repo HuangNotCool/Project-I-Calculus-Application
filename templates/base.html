@@ -8,7 +8,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 </head>
 <body>
@@ -24,14 +23,13 @@
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
                         <li class="nav-item me-3">
-                            <span class="nav-link text-primary fw-bold">
+                            <a href="/profile" class="nav-link text-primary fw-bold" title="Xem hồ sơ cá nhân">
                                 <i class="fa-solid fa-user-circle me-1"></i> Chào, {{ current_user.username }}
-                            </span>
+                            </a>
                         </li>
                         <li class="nav-item">
                             <a class="btn btn-outline-danger rounded-pill px-4" href="/logout">Đăng xuất</a>
@@ -74,18 +72,10 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-    
     <script>
-        // Kích hoạt hiệu ứng cuộn trang
-        AOS.init({
-            duration: 800,
-            once: true,
-            offset: 100
-        });
+        AOS.init({ duration: 800, once: true, offset: 100 });
 
-        // Xử lý Dark Mode
         const themeToggle = document.getElementById('theme-toggle');
         const themeIcon = document.getElementById('theme-icon');
         const htmlElement = document.documentElement;
@@ -97,7 +87,6 @@
         themeToggle.addEventListener('click', () => {
             const current = htmlElement.getAttribute('data-bs-theme');
             const nextTheme = current === 'light' ? 'dark' : 'light';
-            
             htmlElement.setAttribute('data-bs-theme', nextTheme);
             localStorage.setItem('theme', nextTheme);
             updateIcon(nextTheme);

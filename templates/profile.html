@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row" data-aos="fade-up">
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm border-0 rounded-3 text-center p-4">
+                <div class="mb-3">
+                    <i class="fa-solid fa-user-graduate text-primary" style="font-size: 5rem;"></i>
+                </div>
+                <h4 class="fw-bold mb-1">{{ user.username }}</h4>
+                <span class="badge bg-primary mb-3">
+                    {{ 'Sinh viên Bách Khoa' if user.role == 'student' else 'Giảng viên' }}
+                </span>
+                <ul class="list-group list-group-flush text-start mt-3">
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span class="text-muted"><i class="fa-solid fa-calendar-days me-2"></i>Ngày gia nhập</span>
+                        <strong>Hôm nay</strong>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span class="text-muted"><i class="fa-solid fa-medal me-2"></i>Tổng huy hiệu</span>
+                        <strong>{{ user.badges|length }}</strong>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0 rounded-3 p-4 h-100">
+                <h4 class="fw-bold text-primary border-bottom pb-3 mb-4">
+                    <i class="fa-solid fa-trophy me-2 text-warning"></i>Bộ Sưu Tập Thành Tựu
+                </h4>
+                
+                {% if user.badges %}
+                    <div class="row g-3">
+                        {% for badge in user.badges %}
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center p-3 border rounded-3 bg-light" style="transition: transform 0.2s; cursor: pointer;" onmouseover="this.style.transform='translateY(-3px)'" onmouseout="this.style.transform='translateY(0)'">
+                                <div class="me-3">
+                                    <i class="fa-solid {{ badge.icon }} {{ badge.color }}" style="font-size: 2.5rem;"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-1">{{ badge.name }}</h6>
+                                    <p class="text-muted small mb-0">{{ badge.description }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted mt-5">
+                        <i class="fa-regular fa-folder-open fs-1 mb-3 text-secondary"></i>
+                        <p>Bạn chưa sở hữu huy hiệu nào. Hãy bắt đầu làm bài tập nhé!</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<div class="bg-white p-4 rounded-3 shadow-sm border-0 mb-4 mt-3" style="border-left: 5px solid var(--primary-blue) !important;">
+<div class="card p-4 rounded-3 shadow-sm border-0 mb-4 mt-3" style="border-left: 5px solid var(--primary-blue) !important;">
     <h3 class="fw-bold text-primary mb-1">Góc học tập của {{ current_user.username }}</h3>
     <p class="text-muted mb-0">Mục tiêu: Hoàn thành 100% lộ trình Giải tích I. Cố lên nhé!</p>
 </div>
@@ -20,18 +20,17 @@
 </ul>
 
 <div class="tab-content" id="studentTabsContent">
-    
     <div class="tab-pane fade show active" id="roadmap" role="tabpanel">
         <div class="accordion shadow-sm" id="roadmapAccordion">
             
             <div class="accordion-item border-0 mb-3 rounded-3 overflow-hidden">
                 <h2 class="accordion-header" id="headingOne">
-                    <button class="accordion-button fw-bold fs-5 bg-white text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
+                    <button class="accordion-button fw-bold fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
                         Chương 1: Giới hạn và Liên tục
                     </button>
                 </h2>
                 <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#roadmapAccordion">
-                    <div class="accordion-body bg-light">
+                    <div class="accordion-body">
                         <div class="list-group list-group-flush rounded-3">
                             <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
                                 <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
@@ -60,12 +59,12 @@
 
             <div class="accordion-item border-0 mb-3 rounded-3 overflow-hidden shadow-sm">
                 <h2 class="accordion-header" id="headingTwo">
-                    <button class="accordion-button collapsed fw-bold fs-5 bg-white text-dark" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                    <button class="accordion-button collapsed fw-bold fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
                         Chương 2: Phép tính Vi phân (Đạo hàm)
                     </button>
                 </h2>
                 <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#roadmapAccordion">
-                    <div class="accordion-body bg-light">
+                    <div class="accordion-body">
                         <div class="list-group list-group-flush rounded-3">
                             <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
                                 <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
@@ -76,20 +75,11 @@
                                     <small class="text-muted">Video bài giảng • 20 phút</small>
                                 </div>
                             </a>
-                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
-                                <div class="bg-secondary bg-opacity-10 text-secondary rounded-circle p-2 me-3">
-                                    <i class="fa-solid fa-lock fs-4"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0 fw-bold text-muted">Quiz: Ứng dụng đạo hàm</h6>
-                                    <small class="text-muted">Vui lòng xem video trước khi làm bài</small>
-                                </div>
-                            </a>
                         </div>
                     </div>
                 </div>
             </div>
-
+            
         </div>
     </div>
 
@@ -97,53 +87,40 @@
         <div class="row justify-content-center">
             <div class="col-md-8">
                 <div class="card shadow-sm border-0 rounded-3 p-4">
-                    <h4 class="fw-bold text-center mb-4" style="color: var(--accent-orange);">Tùy Chỉnh Mức Độ</h4>
-                    
+                    <h4 class="fw-bold text-center mb-4" style="color: var(--accent-orange);">Tùy Chỉnh Đề Thi Trắc Nghiệm</h4>
                     <form action="#" method="GET">
                         <div class="mb-4">
                             <label class="form-label fw-bold">1. Chọn phạm vi kiến thức:</label>
                             <select class="form-select" name="chapter">
-                                <option value="all">Tổng hợp</option>
-                                <option value="ch1"> Chương 1: Giới hạn & Liên tục</option>
-                                <option value="ch2"> Chương 2: Vi phân (Đạo hàm)</option>
-                                <option value="ch3"> Chương 3: Tích phân</option>
+                                <option value="all">Toàn bộ chương trình Giải tích I (Đề Final)</option>
+                                <option value="ch1">Chỉ ôn Chương 1: Giới hạn & Liên tục</option>
                             </select>
                         </div>
-
                         <div class="mb-4">
                             <label class="form-label fw-bold">2. Mức độ khó:</label>
                             <div class="d-flex gap-3">
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="difficulty" id="diffEasy" value="easy" checked>
-                                    <label class="form-check-label text-success fw-bold" for="diffEasy">Dễ </label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="difficulty" id="diffMed" value="medium">
-                                    <label class="form-check-label text-warning fw-bold" for="diffMed">Trung Bình </label>
+                                    <label class="form-check-label text-success fw-bold" for="diffEasy">Cơ bản (Qua môn)</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="difficulty" id="diffHard" value="hard">
-                                    <label class="form-check-label text-danger fw-bold" for="diffHard">Khó </label>
+                                    <label class="form-check-label text-danger fw-bold" for="diffHard">Khó (Mục tiêu A/A+)</label>
                                 </div>
                             </div>
                         </div>
-
                         <div class="mb-4">
                             <label class="form-label fw-bold">3. Số lượng câu hỏi:</label>
                             <input type="range" class="form-range" min="10" max="50" step="10" id="questionCount" oninput="document.getElementById('qNum').innerText = this.value">
                             <div class="text-center mt-2 fw-bold text-primary"><span id="qNum" class="fs-4">30</span> câu</div>
                         </div>
-
                         <button type="submit" class="btn btn-register w-100 py-3 rounded-pill fw-bold fs-5 shadow">
-                            <i class="fa-solid fa-rocket me-2"></i>Bắt Đầu Làm Bài
+                            <i class="fa-solid fa-rocket me-2"></i>Tạo Đề & Bắt Đầu Tính Giờ
                         </button>
                     </form>
-
                 </div>
             </div>
         </div>
     </div>
-
 </div>
-
 {% endblock %}
