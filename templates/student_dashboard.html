@@ -1,126 +1,347 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<div class="card p-4 rounded-3 shadow-sm border-0 mb-4 mt-3" style="border-left: 5px solid var(--primary-blue) !important;">
-    <h3 class="fw-bold text-primary mb-1">Góc học tập của {{ current_user.username }}</h3>
-    <p class="text-muted mb-0">Mục tiêu: Hoàn thành 100% lộ trình Giải tích I. Cố lên nhé!</p>
+<div class="card p-4 rounded-4 shadow-sm border-0 mb-4 mt-3 text-white overflow-hidden position-relative" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
+    <i class="fa-solid fa-graduation-cap position-absolute opacity-10" style="font-size: 10rem; right: -1rem; top: -2rem;"></i>
+    <div class="position-relative z-1 d-flex justify-content-between align-items-center">
+        <div>
+            <h3 class="fw-bold mb-1">CÙNG BẠN HỌC TẬP VÀ TIẾN BỘ MỖI NGÀY</h3>
+            <p class="mb-0 opacity-75"><i class="fa-brands fa-youtube text-danger me-2"></i><a href="#" class="text-white text-decoration-none text-decoration-underline-hover">Xem cẩm nang hướng dẫn sử dụng hệ thống</a></p>
+        </div>
+        <div class="d-none d-md-flex align-items-center bg-white bg-opacity-25 px-4 py-2 rounded-pill shadow-sm">
+            <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=ffffff&color=007bff&rounded=true&bold=true" alt="Avatar" width="40" class="rounded-circle me-3">
+            <div>
+                <h6 class="mb-0 fw-bold">{{ current_user.username }}</h6>
+                <small class="opacity-75">Học sinh</small>
+            </div>
+        </div>
+    </div>
 </div>
 
-<ul class="nav nav-pills mb-4" id="studentTabs" role="tablist">
-    <li class="nav-item" role="presentation">
-        <button class="nav-link active rounded-pill px-4 fw-bold me-2" id="roadmap-tab" data-bs-toggle="pill" data-bs-target="#roadmap" type="button" role="tab">
-            <i class="fa-solid fa-map-location-dot me-2"></i>Lộ trình học
-        </button>
-    </li>
-    <li class="nav-item" role="presentation">
-        <button class="nav-link rounded-pill px-4 fw-bold" id="practice-tab" data-bs-toggle="pill" data-bs-target="#practice" type="button" role="tab">
-            <i class="fa-solid fa-dumbbell me-2"></i>Luyện đề tổng hợp
-        </button>
-    </li>
-</ul>
-
-<div class="tab-content" id="studentTabsContent">
-    <div class="tab-pane fade show active" id="roadmap" role="tabpanel">
-        <div class="accordion shadow-sm" id="roadmapAccordion">
-            
-            <div class="accordion-item border-0 mb-3 rounded-3 overflow-hidden">
-                <h2 class="accordion-header" id="headingOne">
-                    <button class="accordion-button fw-bold fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
-                        Chương 1: Giới hạn và Liên tục
-                    </button>
-                </h2>
-                <div id="collapseOne" class="accordion-collapse collapse show" data-bs-parent="#roadmapAccordion">
-                    <div class="accordion-body">
-                        <div class="list-group list-group-flush rounded-3">
-                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
-                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
-                                    <i class="fa-solid fa-circle-play fs-4"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0 fw-bold">Bài 1: Định nghĩa và tính chất của Giới hạn</h6>
-                                    <small class="text-muted">Video bài giảng • 15 phút</small>
-                                </div>
-                                <span class="badge bg-success rounded-pill">Đã xem</span>
-                            </a>
-                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
-                                <div class="bg-warning bg-opacity-10 text-warning rounded-circle p-2 me-3">
-                                    <i class="fa-solid fa-pen-to-square fs-4"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0 fw-bold">Quiz: Trắc nghiệm Giới hạn cơ bản</h6>
-                                    <small class="text-muted">Bài tập thực hành • 10 câu</small>
-                                </div>
-                                <button class="btn btn-sm btn-outline-primary rounded-pill">Làm bài</button>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="accordion-item border-0 mb-3 rounded-3 overflow-hidden shadow-sm">
-                <h2 class="accordion-header" id="headingTwo">
-                    <button class="accordion-button collapsed fw-bold fs-5" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
-                        Chương 2: Phép tính Vi phân (Đạo hàm)
-                    </button>
-                </h2>
-                <div id="collapseTwo" class="accordion-collapse collapse" data-bs-parent="#roadmapAccordion">
-                    <div class="accordion-body">
-                        <div class="list-group list-group-flush rounded-3">
-                            <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3">
-                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
-                                    <i class="fa-solid fa-circle-play fs-4"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-0 fw-bold">Bài 1: Bảng đạo hàm cơ bản & Quy tắc</h6>
-                                    <small class="text-muted">Video bài giảng • 20 phút</small>
-                                </div>
-                            </a>
-                        </div>
-                    </div>
-                </div>
+<div class="row g-4" data-aos="fade-up">
+    <div class="col-lg-3">
+        <div class="card shadow-sm border-0 rounded-4 bg-body p-3 h-100">
+            <div class="d-flex align-items-center mb-4 text-muted">
+                <i class="fa-solid fa-book-open fs-3 me-3 text-success"></i>
+                <h6 class="mb-0 fw-bold">HƯỚNG DẪN SỬ<br>DỤNG</h6>
             </div>
             
+            <div class="list-group list-group-flush nav nav-pills" role="tablist">
+                <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2 active" data-bs-toggle="pill" href="#tab-home" role="tab">
+                    <i class="fa-solid fa-angle-right me-2 small"></i> Trang chủ tổng hợp
+                </a>
+                <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2" data-bs-toggle="pill" href="#tab-my-classes" role="tab">
+                    <i class="fa-solid fa-angle-right me-2 small"></i> Lớp học của bạn
+                </a>
+                <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2" data-bs-toggle="pill" href="#tab-roadmap" role="tab">
+                    <i class="fa-solid fa-angle-right me-2 small"></i> Khai thác học liệu
+                </a>
+                <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2" data-bs-toggle="pill" href="#tab-practice" role="tab">
+                    <i class="fa-solid fa-angle-right me-2 small"></i> Thi & Luyện thi
+                </a>
+            </div>
         </div>
     </div>
 
-    <div class="tab-pane fade" id="practice" role="tabpanel">
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card shadow-sm border-0 rounded-3 p-4">
-                    <h4 class="fw-bold text-center mb-4" style="color: var(--accent-orange);">Tùy Chỉnh Đề Thi Trắc Nghiệm</h4>
-                    <form action="#" method="GET">
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">1. Chọn phạm vi kiến thức:</label>
-                            <select class="form-select" name="chapter">
-                                <option value="all">Toàn bộ chương trình Giải tích I (Đề Final)</option>
-                                <option value="ch1">Chỉ ôn Chương 1: Giới hạn & Liên tục</option>
-                            </select>
+    <div class="col-lg-9">
+        <div class="tab-content" id="studentTabContent">
+
+            <div class="tab-pane fade show active" id="tab-home" role="tabpanel">
+                <div class="row g-4">
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer" onclick="switchToTab('tab-roadmap')">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center position-relative">
+                                <span class="badge bg-danger position-absolute top-0 end-0 mt-3 me-3 rounded-pill px-2">NEW</span>
+                                <img src="https://cdn-icons-png.flaticon.com/512/3074/3074058.png" alt="Icon" width="60" class="mb-3">
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Khai thác học liệu</h6>
+                            </div>
                         </div>
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">2. Mức độ khó:</label>
-                            <div class="d-flex gap-3">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="difficulty" id="diffEasy" value="easy" checked>
-                                    <label class="form-check-label text-success fw-bold" for="diffEasy">Cơ bản (Qua môn)</label>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer" onclick="switchToTab('tab-my-classes')">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center">
+                                <img src="https://cdn-icons-png.flaticon.com/512/4762/4762311.png" alt="Icon" width="60" class="mb-3">
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Lớp học của bạn</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer" onclick="switchToTab('tab-practice')">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center">
+                                <img src="https://cdn-icons-png.flaticon.com/512/3135/3135810.png" alt="Icon" width="60" class="mb-3">
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Thi & Luyện thi</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer" data-bs-toggle="modal" data-bs-target="#joinClassModal">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px; border: 3px solid #ff6600; color: #ff6600;">
+                                    <i class="fa-solid fa-plus fs-2"></i>
                                 </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="difficulty" id="diffHard" value="hard">
-                                    <label class="form-check-label text-danger fw-bold" for="diffHard">Khó (Mục tiêu A/A+)</label>
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Đăng ký lớp</h6>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-my-classes" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="fw-bold text-primary mb-0"><i class="fa-solid fa-school me-2"></i>Lớp học của tôi</h4>
+                    <button class="btn btn-sm btn-outline-primary fw-bold rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#joinClassModal">
+                        <i class="fa-solid fa-plus me-1"></i> Nhập mã lớp
+                    </button>
+                </div>
+                
+                <div class="row g-4" id="myClassesList">
+                    {% for c in classes %}
+                    <div class="col-md-6 col-lg-6 mb-2">
+                        <div class="card border-0 shadow-sm rounded-4 h-100 daymai-grid-card bg-body">
+                            <div class="card-body p-4 d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle shadow-sm" style="width: 55px; height: 55px; background-color: #fff3e0; color: #ff6600;">
+                                        <i class="fa-solid fa-chalkboard fs-3"></i>
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill px-3 py-2 shadow-sm">{{ c.code }}</span>
+                                </div>
+                                <h5 class="fw-bold text-body mb-1">{{ c.name }}</h5>
+                                <p class="text-muted small mb-3"><i class="fa-solid fa-circle-info me-1"></i> {{ c.description if c.description else 'Học phần Giải tích' }}</p>
+                                
+                                <div class="mt-auto pt-3">
+                                    <button class="btn btn-outline-primary rounded-pill w-100 fw-bold hover-lift" onclick="switchToTab('tab-practice')">Vào lớp ngay</button>
                                 </div>
                             </div>
                         </div>
-                        <div class="mb-4">
-                            <label class="form-label fw-bold">3. Số lượng câu hỏi:</label>
-                            <input type="range" class="form-range" min="10" max="50" step="10" id="questionCount" oninput="document.getElementById('qNum').innerText = this.value">
-                            <div class="text-center mt-2 fw-bold text-primary"><span id="qNum" class="fs-4">30</span> câu</div>
-                        </div>
-                        <button type="submit" class="btn btn-register w-100 py-3 rounded-pill fw-bold fs-5 shadow">
-                            <i class="fa-solid fa-rocket me-2"></i>Tạo Đề & Bắt Đầu Tính Giờ
+                    </div>
+                    {% else %}
+                    <div class="col-12 text-center py-5 bg-body rounded-4 shadow-sm" id="emptyClassState">
+                        <img src="https://cdn-icons-png.flaticon.com/512/7486/7486747.png" width="100" class="mb-3 opacity-50">
+                        <h5 class="text-body fw-bold">Bạn chưa tham gia lớp học nào</h5>
+                        <p class="text-muted small mb-4">Xin Giảng viên mã lớp (VD: HUST-XXXX) để bắt đầu nhận bài tập.</p>
+                        <button class="btn rounded-pill px-4 fw-bold shadow text-white hover-lift" style="background-color: #ff6600;" data-bs-toggle="modal" data-bs-target="#joinClassModal">
+                            Tham gia lớp ngay
                         </button>
-                    </form>
+                    </div> 
+                    {% endfor %}
                 </div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-roadmap" role="tabpanel">
+                <h4 class="fw-bold text-primary mb-4"><i class="fa-solid fa-map-location-dot me-2"></i>Khai thác học liệu (Lộ trình)</h4>
+                <div class="accordion shadow-sm rounded-4 overflow-hidden bg-body" id="roadmapAccordion">
+                    <div class="accordion-item border-0 border-bottom border-secondary-subtle">
+                        <h2 class="accordion-header" id="headingOne">
+                            <button class="accordion-button fw-bold fs-5 bg-body text-body" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOne" aria-expanded="true">
+                                Chương 1: Giới hạn và Liên tục
+                            </button>
+                        </h2>
+                        <div id="collapseOne" class="accordion-collapse collapse show bg-body" data-bs-parent="#roadmapAccordion">
+                            <div class="accordion-body">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3 bg-transparent border-0 border-bottom border-secondary-subtle">
+                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
+                                            <i class="fa-solid fa-circle-play fs-4"></i>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-0 fw-bold text-body">Bài 1: Định nghĩa và tính chất của Giới hạn</h6>
+                                            <small class="text-muted">Video bài giảng • 15 phút</small>
+                                        </div>
+                                        <span class="badge bg-success rounded-pill">Đã xem</span>
+                                    </a>
+                                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3 bg-transparent border-0">
+                                        <div class="bg-warning bg-opacity-10 text-warning rounded-circle p-2 me-3">
+                                            <i class="fa-solid fa-pen-to-square fs-4"></i>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-0 fw-bold text-body">Quiz: Trắc nghiệm Giới hạn cơ bản</h6>
+                                            <small class="text-muted">Bài tập thực hành • 10 câu</small>
+                                        </div>
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill fw-bold">Làm bài</button>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item border-0">
+                        <h2 class="accordion-header" id="headingTwo">
+                            <button class="accordion-button collapsed fw-bold fs-5 bg-body text-body" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTwo">
+                                Chương 2: Phép tính Vi phân (Đạo hàm)
+                            </button>
+                        </h2>
+                        <div id="collapseTwo" class="accordion-collapse collapse bg-body" data-bs-parent="#roadmapAccordion">
+                            <div class="accordion-body">
+                                <div class="list-group list-group-flush">
+                                    <a href="#" class="list-group-item list-group-item-action d-flex align-items-center p-3 bg-transparent border-0">
+                                        <div class="bg-primary bg-opacity-10 text-primary rounded-circle p-2 me-3">
+                                            <i class="fa-solid fa-circle-play fs-4"></i>
+                                        </div>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-0 fw-bold text-body">Bài 1: Bảng đạo hàm cơ bản & Quy tắc</h6>
+                                            <small class="text-muted">Video bài giảng • 20 phút</small>
+                                        </div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-practice" role="tabpanel">
+                <div class="row justify-content-center">
+                    <div class="col-md-10">
+                        <div class="card shadow-sm border-0 rounded-4 p-4 p-md-5 bg-body">
+                            <h4 class="fw-bold text-center mb-4" style="color: #ff6600;">Tùy Chỉnh Đề Thi Trắc Nghiệm</h4>
+                            <form action="#" method="GET">
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-body">1. Chọn phạm vi kiến thức:</label>
+                                    <select class="form-select bg-body-tertiary border-0 py-3 rounded-3 shadow-sm text-body" name="chapter">
+                                        <option value="all">Toàn bộ chương trình Giải tích I (Đề Final)</option>
+                                        <option value="ch1">Chỉ ôn Chương 1: Giới hạn & Liên tục</option>
+                                    </select>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold text-body">2. Mức độ khó:</label>
+                                    <div class="d-flex gap-4 p-3 bg-body-tertiary rounded-3 shadow-sm">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="difficulty" id="diffEasy" value="easy" checked>
+                                            <label class="form-check-label text-success fw-bold" for="diffEasy">Cơ bản (Qua môn)</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="difficulty" id="diffHard" value="hard">
+                                            <label class="form-check-label text-danger fw-bold" for="diffHard">Khó (Mục tiêu A/A+)</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mb-5">
+                                    <label class="form-label fw-bold text-body">3. Số lượng câu hỏi:</label>
+                                    <input type="range" class="form-range" min="10" max="50" step="10" id="questionCount" oninput="document.getElementById('qNum').innerText = this.value">
+                                    <div class="text-center mt-2 fw-bold text-primary"><span id="qNum" class="fs-3">30</span> câu</div>
+                                </div>
+                                <button type="submit" class="btn w-100 py-3 rounded-pill fw-bold fs-5 shadow hover-lift text-white" style="background-color: #007bff;">
+                                    <i class="fa-solid fa-rocket me-2"></i>Tạo Đề & Bắt Đầu Tính Giờ
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div> 
+    </div>
+</div>
+
+<div class="modal fade" id="joinClassModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <h4 class="modal-title fw-bold text-primary"><i class="fa-solid fa-link me-2"></i>Đăng ký tham gia lớp</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <p class="text-muted mb-4">Xin Giảng viên mã lớp (VD: HUST-XXXX) và nhập vào bên dưới để vào lớp.</p>
+                <form id="joinClassForm" onsubmit="event.preventDefault(); joinClassAjax();">
+                    <input type="text" id="classCodeInput" name="class_code" class="form-control form-control-lg border-2 py-3 fw-bold text-uppercase fs-4 font-monospace text-center text-success mb-3 shadow-sm" style="border-color: #007bff; letter-spacing: 2px;" placeholder="Nhập mã lớp..." required autocomplete="off">
+                    
+                    <div id="joinSuccessAlert" class="alert alert-success d-none rounded-3 border-0 shadow-sm text-start small">
+                        <i class="fa-solid fa-circle-check me-2"></i><strong>Thành công!</strong> Đã tìm thấy lớp. Đang tải dữ liệu...
+                    </div>
+                    <div id="joinErrorAlert" class="alert alert-danger d-none rounded-3 border-0 shadow-sm text-start small">
+                        <i class="fa-solid fa-circle-xmark me-2"></i><span id="joinErrorMsg">Mã lớp không hợp lệ.</span>
+                    </div>
+
+                    <button type="submit" id="btnJoinClass" class="btn rounded-pill px-5 py-3 fw-bold text-white shadow-sm w-100 hover-lift fs-5 mt-2" style="background-color: #ff6600;">
+                        Xác nhận tham gia
+                    </button>
+                </form>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    /* CSS Grid Card (Daymai Style) */
+    .daymai-grid-card {
+        border: 1px solid rgba(0,0,0,0.05) !important;
+        transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    }
+    .daymai-grid-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 1rem 3rem rgba(0,0,0,.1) !important;
+        border-color: #007bff !important;
+    }
+    .cursor-pointer { cursor: pointer; }
+    .hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+    
+    /* Chuyển màu sidebar pill link khi active thành text-primary nhưng background nhạt */
+    .nav-pills .list-group-item.active {
+        background-color: transparent !important;
+        color: #007bff !important;
+        font-weight: 800 !important;
+    }
+</style>
+
+<script>
+    // Hàm hỗ trợ chuyển đổi Tab thông qua Javascript khi click vào Card Grid
+    function switchToTab(tabId) {
+        document.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
+        const sidebarLink = document.querySelector(`.list-group-item[href="#${tabId}"]`);
+        if (sidebarLink) sidebarLink.classList.add('active');
+
+        const targetTab = new bootstrap.Tab(document.querySelector(`#tab-${tabId}`) || document.querySelector(`.list-group-item[href="#${tabId}"]`));
+        targetTab.show();
+    }
+
+    // Logic AJAX xử lý việc nhập Mã Lớp Học (CẬP NHẬT GỌI ĐẾN DATABASE)
+    function joinClassAjax() {
+        const classCode = document.getElementById('classCodeInput').value.trim().toUpperCase();
+        const btn = document.getElementById('btnJoinClass');
+        const successAlert = document.getElementById('joinSuccessAlert');
+        const errorAlert = document.getElementById('joinErrorAlert');
+        const errorMsg = document.getElementById('joinErrorMsg');
+
+        // Reset UI
+        successAlert.classList.add('d-none');
+        errorAlert.classList.add('d-none');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang kiểm tra...';
+        btn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('class_code', classCode);
+
+        // Gửi lên server Python
+        fetch('/api/student/join-class', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            btn.innerHTML = 'Xác nhận tham gia';
+            btn.disabled = false;
+
+            if (data.success) {
+                // Hiển thị thông báo thành công
+                successAlert.classList.remove('d-none');
+                
+                // Tải lại trang sau 1 giây để Jinja2 cập nhật danh sách lớp từ Database
+                setTimeout(() => {
+                    location.reload();
+                }, 1000);
+
+            } else {
+                errorMsg.innerText = data.message;
+                errorAlert.classList.remove('d-none');
+            }
+        })
+        .catch(err => {
+            btn.innerHTML = 'Xác nhận tham gia';
+            btn.disabled = false;
+            errorMsg.innerText = "Lỗi kết nối máy chủ!";
+            errorAlert.classList.remove('d-none');
+        });
+    }
+</script>
+
 {% endblock %}

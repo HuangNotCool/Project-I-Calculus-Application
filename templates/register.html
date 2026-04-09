@@ -1,33 +1,106 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card shadow border-0 rounded-3">
-            <div class="card-header bg-success text-white text-center py-3">
-                <h4 class="mb-0">Đăng Ký Tài Khoản Mới</h4>
+
+<div class="container d-flex justify-content-center align-items-center mt-4 mb-5" style="min-height: 75vh;" data-aos="fade-up">
+    <div class="card border-0 shadow-lg rounded-4 p-4 p-md-5 w-100 bg-body" style="max-width: 850px;">
+
+        <div class="mb-4 d-flex align-items-center justify-content-between">
+            <a href="/login" class="text-decoration-none fw-bold text-primary hover-opacity">
+                <i class="fa-solid fa-chevron-left me-1"></i> Quay lại
+            </a>
+            <h4 class="fw-bold text-primary mb-0 d-none d-sm-block text-uppercase">Giải Tích HUST</h4>
+        </div>
+
+        <div class="d-none d-md-flex justify-content-between align-items-center mb-5 position-relative text-center px-4">
+            <div class="position-absolute top-50 start-0 end-0 translate-middle-y bg-secondary opacity-25" style="height: 2px; z-index: 1;"></div>
+
+            <div class="position-relative z-2 bg-body px-3">
+                <div class="text-primary fw-bold mb-1">
+                    <i class="fa-regular fa-user fs-4 mb-2 d-block"></i> Đăng ký
+                </div>
+                <small class="text-muted">Nhập thông tin đăng ký</small>
             </div>
-            <div class="card-body p-4">
-                <form method="POST" action="/register">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Tên đăng nhập / Mã SV</label>
-                        <input type="text" class="form-control" name="username" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Mật khẩu</label>
-                        <input type="password" class="form-control" name="password" required>
-                    </div>
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Bạn là:</label>
-                        <select class="form-select" name="role">
-                            <option value="student">Sinh viên </option>
-                            <option value="teacher">Giảng viên</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100 py-2">Tạo Tài Khoản</button>
-                </form>
+
+            <div class="position-relative z-2 bg-body px-3 opacity-50">
+                <div class="text-muted fw-bold mb-1">
+                    <i class="fa-solid fa-shield-halved fs-4 mb-2 d-block"></i> Xác nhận
+                </div>
+                <small class="text-muted">Đăng nhập hệ thống</small>
+            </div>
+
+            <div class="position-relative z-2 bg-body px-3 opacity-50">
+                <div class="text-muted fw-bold mb-1">
+                    <i class="fa-regular fa-circle-check fs-4 mb-2 d-block"></i> Hoàn thành
+                </div>
+                <small class="text-muted">Bắt đầu học tập</small>
             </div>
         </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show rounded-3 border-0 shadow-sm" role="alert">
+                        <i class="fa-solid fa-circle-exclamation me-2"></i>{{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/register">
+            <div class="row g-4 mb-4">
+                
+                <div class="col-12">
+                    <label class="form-label fw-bold text-body">Tên đăng nhập / Mã SV <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3" name="username" placeholder="Nhập tên đăng nhập" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-body">Mật khẩu mới <span class="text-danger">*</span></label>
+                    <div class="input-group shadow-sm rounded-3 overflow-hidden border-0">
+                        <input type="password" class="form-control bg-body-tertiary text-body border-0 py-3 px-4" name="password" placeholder="Nhập vào mật khẩu" required>
+                        <span class="input-group-text bg-body-tertiary border-0 text-muted pe-3"><i class="fa-regular fa-eye-slash"></i></span>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-body">Nhập lại mật khẩu <span class="text-danger">*</span></label>
+                    <div class="input-group shadow-sm rounded-3 overflow-hidden border-0">
+                        <input type="password" class="form-control bg-body-tertiary text-body border-0 py-3 px-4" name="confirm_password" placeholder="Nhập lại mật khẩu" required>
+                        <span class="input-group-text bg-body-tertiary border-0 text-muted pe-3"><i class="fa-regular fa-eye-slash"></i></span>
+                    </div>
+                </div>
+
+                <div class="col-12 mt-4">
+                    <label class="form-label fw-bold text-body">Bạn là: <span class="text-danger">*</span></label>
+                    <select class="form-select bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3 fw-medium" name="role" required>
+                        <option value="student" selected>Sinh viên</option>
+                        <option value="teacher">Giáo viên (Demo)</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="text-center mt-5">
+                <button type="submit" class="btn btn-primary btn-lg px-5 py-3 rounded-pill fw-bold shadow hover-lift" style="min-width: 250px;">
+                    <i class="fa-regular fa-circle-check me-2"></i>Đăng ký
+                </button>
+            </div>
+        </form>
+
     </div>
 </div>
+
+<style>
+    /* Các hiệu ứng phụ trợ */
+    .hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+    .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+    .hover-opacity:hover { opacity: 0.8; }
+    
+    /* Đồng bộ màu nền các ô input ở chế độ Sáng/Tối */
+    [data-bs-theme="dark"] .bg-body-tertiary { background-color: #2b3035 !important; }
+    [data-bs-theme="dark"] .form-control::placeholder { color: #8c9297 !important; }
+</style>
+
+
 {% endblock %}

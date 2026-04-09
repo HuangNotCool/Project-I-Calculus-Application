@@ -1,5 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file
-from models import db, User, Badge
+from models import db, User, Badge, Class
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sympy as sp
@@ -106,15 +106,86 @@ def teacher_dashboard():
     if current_user.role != 'teacher':
         flash('Bạn không có quyền truy cập trang này!', 'danger')
         return redirect(url_for('student_dashboard'))
-    return render_template('teacher_dashboard.html')
+    
+    # Lấy toàn bộ lớp học do giáo viên này tạo từ CSDL
+    my_classes = Class.query.filter_by(teacher_id=current_user.id).all()
+    
+    return render_template('teacher_dashboard.html', classes=my_classes)
 
+
+# =====================================================================
+# --- API DASHBOARD HỌC SINH (ĐÃ CẬP NHẬT DATABASE) ---
+# =====================================================================
 @app.route('/student-dashboard')
 @login_required
 def student_dashboard():
-    return render_template('student_dashboard.html')
+    if current_user.role != 'student':
+        return redirect(url_for('teacher_dashboard'))
+    
+    # Lấy danh sách các lớp học mà học sinh này đã tham gia (nhờ relationship enrolled_classes trong models)
+    my_classes = current_user.enrolled_classes
+    return render_template('student_dashboard.html', classes=my_classes)
 
 
-# --- 1. API NHẬN YÊU CẦU VÀ SINH ĐỀ (LƯU VÀO SESSION) ---
+# =====================================================================
+# --- API GIẢNG VIÊN: TẠO LỚP HỌC MỚI ---
+# =====================================================================
+@app.route('/api/teacher/create-class', methods=['POST'])
+@login_required
+def api_create_class():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    name = request.form.get('name')
+    description = request.form.get('description')
+    code = request.form.get('code')
+
+    if not name or not code:
+        return jsonify({'success': False, 'message': 'Thiếu thông tin lớp học!'})
+
+    # Kiểm tra mã lớp đã tồn tại chưa
+    existing_class = Class.query.filter_by(code=code).first()
+    if existing_class:
+        return jsonify({'success': False, 'message': 'Mã lớp này đã tồn tại, vui lòng tạo mã khác!'})
+
+    new_class = Class(name=name, description=description, code=code, teacher_id=current_user.id)
+    db.session.add(new_class)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+# =====================================================================
+# --- API GIẢNG VIÊN: XÓA LỚP HỌC ---
+# =====================================================================
+@app.route('/api/teacher/delete-class/<int:class_id>', methods=['POST'])
+@login_required
+def api_delete_class(class_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    # Tìm lớp học trong CSDL
+    target_class = Class.query.get_or_404(class_id)
+    
+    # Xác thực: Chỉ người tạo lớp mới được quyền xóa
+    if target_class.teacher_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Bạn không có quyền xóa lớp này!'})
+
+    try:
+        # Hủy liên kết với tất cả học sinh trước khi xóa lớp
+        target_class.students.clear()
+        
+        # Xóa lớp khỏi CSDL
+        db.session.delete(target_class)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Đã xóa lớp học thành công.'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi hệ thống: {str(e)}'})
+
+# =====================================================================
+# --- CÁC ROUTE XỬ LÝ SINH ĐỀ (GIỮ NGUYÊN) ---
+# =====================================================================
 @app.route('/api/generate-exam', methods=['POST'])
 @login_required
 def api_generate_exam():
@@ -127,44 +198,50 @@ def api_generate_exam():
     x = sp.Symbol('x')
 
     def tao_cau_hoi(muc_do):
+        def f_exp(t): return sp.exp(t) - 1
+        def f_sin(t): return sp.sin(t)
+        def f_tan(t): return sp.tan(t)
+        def f_asin(t): return sp.asin(t)
+        def f_atan(t): return sp.atan(t)
+        def f_ln(t): return sp.ln(1 + t)
+        
+        tap_ham = [f_exp, f_sin, f_tan, f_asin, f_atan, f_ln]
+
         if muc_do == 'easy':
-            a = random.randint(1, 5)
-            b = random.randint(-5, 5)
-            expr = a*x**2 + b*x + random.randint(1, 10)
-            val = random.randint(0, 2)
-        elif muc_do == 'medium':
             if random.choice([True, False]):
-                a = random.randint(1, 5)
-                c = random.randint(1, 3)
-                expr = (a*x**2 - a*c**2) / (x - c)
-                val = c
+                a, b, c = random.randint(1, 5), random.randint(-5, 5), random.randint(1, 10)
+                expr = a*x**2 + b*x + c
+                val = random.randint(0, 3)
             else:
-                a = random.randint(1, 5)
-                b = random.randint(1, 5)
+                a, b = random.randint(1, 5), random.randint(1, 5)
                 expr = (a*x**2 + 1) / (b*x**2 + 2)
                 val = sp.oo 
-        else: # muc_do == 'hard'
-            # Áp dụng thuật toán sinh đề tổng quát từ giấy nháp
-            a = random.randint(2, 9)
+                
+        elif muc_do == 'medium':   
+            if random.choice([True, False]):
+                a = random.randint(2, 9)
+                f_chosen = random.choice(tap_ham)
+                expr = f_chosen(a*x) / x
+                val = 0
+            else:
+                a, c = random.randint(1, 5), random.randint(1, 3)
+                expr = (a*x**2 - a*c**2) / (x - c)
+                val = c
+        else: 
+            a, b = random.randint(2, 6), random.randint(2, 6)
+            f_1 = random.choice(tap_ham)
+            f_2 = random.choice(tap_ham)
+            
+            if random.choice([True, False]):
+                expr = f_1(a*x) / f_2(b*x)
+            else:
+                expr = (f_1(a*x) * f_2(b*x)) / (x**2)
             val = 0
-            
-            # Định nghĩa tập các hàm f(t)
-            def f_exp(t): return sp.exp(t) - 1
-            def f_sin(t): return sp.sin(t)
-            def f_tan(t): return sp.tan(t)
-            def f_asin(t): return sp.asin(t)
-            def f_atan(t): return sp.atan(t)
-            def f_ln(t): return sp.ln(1 + t)
-            
-            # Chọn ngẫu nhiên 1 hàm trong tập hợp
-            f_chosen = random.choice([f_exp, f_sin, f_tan, f_asin, f_atan, f_ln])
-            
-            # Khởi tạo biểu thức chuẩn f(ax) / x
-            expr = f_chosen(a*x) / x
 
         ans = sp.limit(expr, x, val)
         val_tex = sp.latex(val) 
         de_bai_latex = rf"\displaystyle \lim_{{x \to {val_tex}}} {sp.latex(expr)}"
+        
         return de_bai_latex, ans
 
     if difficulty == 'mixed':
@@ -201,25 +278,15 @@ def api_generate_exam():
 
         tex_content += f"    A. $ {options[0]} $ \\qquad B. $ {options[1]} $ \\qquad C. $ {options[2]} $ \\qquad D. $ {options[3]} $\n\n    \\vspace{{0.3cm}}\n\n"
 
-   # 5. Đóng khối câu hỏi
     tex_content += "\\end{enumerate}\n\n"
-    
-    # 6. In bảng đáp án
     tex_content += "\\vspace{1cm}\n\\hrule\n\\vspace{0.5cm}\n"
     tex_content += "\\noindent\\textbf{\\Large BẢNG ĐÁP ÁN}\\\\\n\\vspace{0.5cm}\n"
     tex_content += "\\noindent " + " \\quad ".join(bang_dap_an) + "\n\n"
-    
-    # 7. Kết thúc file LaTeX chuẩn xác (1 ngoặc nhọn)
     tex_content += "\\end{document}"
 
-    # LƯU KẾT QUẢ VÀO SESSION TRÌNH DUYỆT
     session['current_exam_tex'] = tex_content
-    
-    # Báo cho giao diện biết đã sinh xong
     return jsonify({'success': True})
 
-
-# --- 2. ROUTE TẢI FILE TEX ---
 @app.route('/download/tex')
 @login_required
 def download_tex():
@@ -230,8 +297,6 @@ def download_tex():
     
     return Response(tex_content, mimetype="text/plain", headers={"Content-disposition": "attachment; filename=De_Thi_Giai_Tich.tex"})
 
-
-# --- 3. ROUTE GỌI MIKTEX BIÊN DỊCH VÀ TẢI PDF TỪ RAM ---
 @app.route('/download/pdf')
 @login_required
 def download_pdf():
@@ -245,7 +310,6 @@ def download_pdf():
     import subprocess
     import io
 
-    # Chứa dữ liệu PDF trên RAM
     pdf_memory = None
 
     with tempfile.TemporaryDirectory() as tempdir:
@@ -270,7 +334,6 @@ def download_pdf():
                 flash('Có lỗi cú pháp khi biên dịch PDF. Hãy xem Terminal (VS Code) để biết chi tiết!', 'danger')
                 return redirect(url_for('teacher_dashboard'))
                 
-            # ĐỌC FILE PDF TỪ Ổ CỨNG VÀO RAM TRƯỚC KHI XOÁ THƯ MỤC TẠM
             with open(pdf_file_path, 'rb') as f:
                 pdf_memory = io.BytesIO(f.read())
 
@@ -279,17 +342,12 @@ def download_pdf():
             flash('Không thể gọi phần mềm MiKTeX. Vui lòng kiểm tra lại cấu hình.', 'danger')
             return redirect(url_for('teacher_dashboard'))
 
-    # Lúc này thư mục tạm đã bị xoá an toàn. Ta gửi PDF từ RAM cho người dùng.
     if pdf_memory:
         return send_file(pdf_memory, as_attachment=True, download_name='De_Thi_Giai_Tich.pdf', mimetype='application/pdf')
     else:
         flash('Lỗi đọc file PDF.', 'danger')
         return redirect(url_for('teacher_dashboard'))
 
-
-# =====================================================================
-# --- CÁC ROUTE XỬ LÝ CHO CHẾ ĐỘ SINH ĐỀ TÙY CHỈNH (ĐÃ TỐI ƯU SIÊU TỐC) ---
-# =====================================================================
 
 @app.route('/api/custom-exam/add', methods=['POST'])
 @login_required
@@ -331,7 +389,6 @@ def custom_exam_add():
         val_tex = sp.latex(val)
         q_tex = rf"\displaystyle \lim_{{x \to {val_tex}}} {sp.latex(expr)}"
         
-        # TÍNH TOÁN ĐÁP ÁN NHIỄU VÀ TRỘN NGAY TẠI ĐÂY
         correct_tex = sp.latex(ans)
         pool = [r"0", r"1", r"-1", r"\infty", r"-\infty", r"\text{Không tồn tại}"]
         if ans.is_number and not ans.has(sp.oo):
@@ -348,8 +405,8 @@ def custom_exam_add():
         question_data = {
             'q_tex': q_tex, 
             'ans_str': str(ans), 
-            'options': options,          # Lưu sẵn 4 đáp án A B C D
-            'correct_letter': correct_letter # Lưu sẵn chữ cái đúng
+            'options': options,
+            'correct_letter': correct_letter
         }
         
         if 'custom_exam' not in session:
@@ -358,7 +415,7 @@ def custom_exam_add():
         custom_list = session['custom_exam']
         custom_list.append(question_data)
         session['custom_exam'] = custom_list
-        session.modified = True # Ép Flask lưu session ngay lập tức
+        session.modified = True
         
         return jsonify({'success': True, 'questions': session['custom_exam']})
         
@@ -393,15 +450,13 @@ def custom_exam_generate():
     bang_dap_an = []
 
     try:
-        # Quá trình gộp đề
         for idx, item in enumerate(custom_list):
             tex_content += f"    \\item Tính giới hạn sau: $ {item['q_tex']} $\n\n"
-            opts = item['options'] # Nếu dính câu hỏi cũ không có 'options', sẽ nhảy ngay xuống except
+            opts = item['options']
             tex_content += f"    A. $ {opts[0]} $ \\qquad B. $ {opts[1]} $ \\qquad C. $ {opts[2]} $ \\qquad D. $ {opts[3]} $\n\n    \\vspace{{0.3cm}}\n\n"
             bang_dap_an.append(f"\\textbf{{{idx + 1}.{item['correct_letter']}}}")
             
     except KeyError:
-        # Bắt lỗi dính Session cũ, tiến hành dọn dẹp
         session.pop('custom_exam', None)
         session.modified = True
         return jsonify({'success': False, 'message': 'Phát hiện câu hỏi cũ gây xung đột! Hệ thống đã tự động dọn dẹp bộ nhớ. Bạn vui lòng thêm lại câu hỏi mới rồi Gộp đề nhé!'})
@@ -417,6 +472,81 @@ def custom_exam_generate():
     session.modified = True
     
     return jsonify({'success': True})
+
+# =====================================================================
+# --- API GIẢNG VIÊN: XEM DANH SÁCH SINH VIÊN TRONG LỚP ---
+# =====================================================================
+@app.route('/api/teacher/class/<int:class_id>/students', methods=['GET'])
+@login_required
+def api_get_class_students(class_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    target_class = Class.query.get_or_404(class_id)
+    
+    # Xác thực quyền sở hữu lớp
+    if target_class.teacher_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Bạn không có quyền xem lớp này!'})
+
+    # Đóng gói dữ liệu sinh viên
+    students_data = []
+    for student in target_class.students:
+        students_data.append({
+            'id': student.id,
+            'username': student.username,
+            # Tạm thời để tiến độ ngẫu nhiên hoặc 0%, sau này bạn nối bảng điểm vào đây
+            'progress': random.choice([0, 20, 50, 80, 100]) 
+        })
+
+    return jsonify({
+        'success': True, 
+        'class_name': target_class.name,
+        'class_code': target_class.code,
+        'students': students_data
+    })
+
+
+# =====================================================================
+# --- API KẾT NỐI: HỌC SINH THAM GIA LỚP HỌC (DATABASE THẬT) ---
+# =====================================================================
+@app.route('/api/student/join-class', methods=['POST'])
+@login_required
+def student_join_class():
+    if current_user.role != 'student':
+        return jsonify({'success': False, 'message': 'Chỉ học sinh mới có thể tham gia lớp!'})
+
+    class_code = request.form.get('class_code', '').strip().upper()
+
+    if not class_code:
+        return jsonify({'success': False, 'message': 'Vui lòng nhập mã lớp!'})
+
+    # 1. Truy vấn Database xem mã lớp có tồn tại không
+    target_class = Class.query.filter_by(code=class_code).first()
+
+    if target_class:
+        # 2. Kiểm tra xem học sinh này đã tham gia lớp chưa
+        if current_user in target_class.students:
+            return jsonify({'success': False, 'message': 'Bạn đã tham gia lớp học này rồi!'})
+        
+        # 3. Thêm học sinh vào lớp và lưu lại
+        target_class.students.append(current_user)
+        db.session.commit()
+
+        # Lấy tên giáo viên phụ trách để trả về 
+        teacher = User.query.get(target_class.teacher_id)
+        teacher_name = teacher.username if teacher else 'Giáo viên'
+
+        return jsonify({
+            'success': True, 
+            'message': 'Tham gia thành công!',
+            'class_info': {
+                'code': target_class.code,
+                'name': target_class.name,
+                'teacher': teacher_name
+            }
+        })
+    else:
+        return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
 
 if __name__ == '__main__':
     app.run(debug=True)

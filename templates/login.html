@@ -1,29 +1,108 @@
 {% extends 'base.html' %}
-
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-5">
-        <div class="card shadow border-0 rounded-3">
-            <div class="card-header bg-primary text-white text-center py-3">
-                <h4 class="mb-0">Đăng Nhập Hệ Thống</h4>
-            </div>
-            <div class="card-body p-4">
-                <form method="POST" action="/login">
+
+<div class="container d-flex justify-content-center align-items-center mt-4 mb-5" style="min-height: 75vh;" data-aos="zoom-in">
+    <div class="card border-0 shadow-lg rounded-4 overflow-hidden w-100 bg-body" style="max-width: 1000px;">
+        <div class="row g-0">
+            
+            <div class="col-lg-5 p-5 d-flex flex-column justify-content-center text-white position-relative" 
+                 style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
+                
+                <div class="text-center mb-4 position-relative z-1">
+                    <h2 class="fw-bold mb-2">Chào mừng bạn</h2>
+                    <p class="opacity-75">Đăng nhập để bắt đầu học tập</p>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }} alert-dismissible fade show rounded-3 border-0 shadow-sm text-start" role="alert">
+                                <i class="fa-solid fa-circle-exclamation me-2"></i>{{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST" action="/login" class="position-relative z-1">
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Tên đăng nhập / Mã SV</label>
-                        <input type="text" class="form-control" name="username" placeholder="Nhập tài khoản..." required>
+                        <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
+                            <span class="input-group-text border-0 text-primary bg-body"><i class="fa-solid fa-user"></i></span>
+                            <input type="text" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="username" name="username" placeholder="Tên đăng nhập" required>
+                        </div>
                     </div>
+                    
                     <div class="mb-4">
-                        <label class="form-label fw-bold">Mật khẩu</label>
-                        <input type="password" class="form-control" name="password" placeholder="Nhập mật khẩu..." required>
+                        <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
+                            <span class="input-group-text border-0 text-primary bg-body"><i class="fa-solid fa-lock"></i></span>
+                            <input type="password" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="password" name="password" placeholder="Nhập mật khẩu" required>
+                        </div>
+                        <div class="text-end mt-2">
+                            <a href="#" class="text-white text-decoration-none small opacity-75 hover-opacity-100">Bạn đã quên mật khẩu?</a>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 py-2">Đăng Nhập</button>
+
+                    <button type="submit" class="btn btn-light btn-lg w-100 rounded-pill fw-bold text-primary shadow mb-4" style="transition: transform 0.2s;">
+                        <i class="fa-regular fa-circle-check me-2"></i>Đăng nhập
+                    </button>
+
+                    <div class="text-center">
+                        <p class="mb-2 opacity-75 small">Bạn chưa có tài khoản?</p>
+                        <a href="/register" class="btn btn-outline-light w-100 rounded-pill fw-bold border-2">
+                            <i class="fa-solid fa-user-plus me-2"></i>Đăng ký ngay
+                        </a>
+                    </div>
                 </form>
-                <div class="text-center mt-3">
-                    <span class="text-muted">Chưa có tài khoản?</span> <a href="/register" class="text-decoration-none">Đăng ký ngay</a>
+            </div>
+
+            <div class="col-lg-7 p-5 d-none d-lg-flex flex-column justify-content-center bg-body-tertiary">
+                <div class="text-center mb-4">
+                    <h2 class="fw-bold text-uppercase text-primary">Giải Tích HUST</h2>
+                    <h5 class="fw-bold" style="color: #ff6600;">TRỌN VẸN TÍNH NĂNG CHO DẠY VÀ HỌC</h5>
+                </div>
+
+                <div class="d-flex flex-column gap-3 px-4">
+                    <div class="p-3 rounded-4 shadow-sm text-white d-flex align-items-center feature-item bg-primary">
+                        <div class="fs-2 me-3"><i class="fa-solid fa-rocket"></i></div>
+                        <div>
+                            <h6 class="mb-0 fw-bold">Hỗ trợ tự động sinh đề thi Giải tích</h6>
+                            <small class="opacity-75">Tạo đề ngẫu nhiên hoặc tùy chỉnh chỉ với 1 click.</small>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-4 shadow-sm text-white d-flex align-items-center feature-item bg-primary">
+                        <div class="fs-2 me-3"><i class="fa-solid fa-file-signature"></i></div>
+                        <div>
+                            <h6 class="mb-0 fw-bold">Thi và kiểm tra bảo mật cao</h6>
+                            <small class="opacity-75">Hệ thống ngân hàng câu hỏi bám sát đề cương Bách Khoa.</small>
+                        </div>
+                    </div>
+
+                    <div class="p-3 rounded-4 shadow-sm text-white d-flex align-items-center feature-item bg-primary">
+                        <div class="fs-2 me-3"><i class="fa-solid fa-chart-pie"></i></div>
+                        <div>
+                            <h6 class="mb-0 fw-bold">Quản lý và thống kê tiến độ</h6>
+                            <small class="opacity-75">Chấm điểm tự động và trao huy hiệu khích lệ sinh viên.</small>
+                        </div>
+                    </div>
                 </div>
             </div>
+
         </div>
     </div>
 </div>
+
+<style>
+    /* CSS hiệu ứng hover nhẹ */
+    .hover-opacity-100:hover { opacity: 1 !important; text-decoration: underline !important; }
+    .btn-light:hover { transform: translateY(-2px); }
+    .feature-item { transition: transform 0.2s ease, filter 0.2s ease; cursor: default; }
+    .feature-item:hover { transform: translateX(5px); filter: brightness(1.1); }
+    
+    /* Ghi đè màu placeholder cho ô input ở Dark Mode để dễ nhìn hơn */
+    [data-bs-theme="dark"] .form-control::placeholder {
+        color: #a0a0a0 !important;
+    }
+</style>
+
 {% endblock %}
