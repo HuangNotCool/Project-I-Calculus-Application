@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file
+from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file,abort
 from models import db, User, Badge, Class
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,6 +8,8 @@ import os
 import subprocess
 import tempfile
 import io
+import re
+import numpy as np
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mot_chuoi_bi_mat_cuc_ky_kho_doan'
@@ -22,6 +24,129 @@ login_manager.init_app(app)
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+def parse_advanced_template(template_text):
+    def generate_instance(seed_val=1):
+        try:
+            seed_int = int(seed_val)
+        except ValueError:
+            seed_int = 1
+
+        # Hàm xử lý cục bộ cho TỪNG khối câu hỏi (VD: %<cau1>% ... %</cau1>%)
+        def process_block(match):
+            block_name = match.group(1) # Tên khối (VD: cau1)
+            block_content = match.group(2) # Nội dung bên trong khối
+            
+            # Tách biến của riêng khối này
+            var_block_match = re.search(r'%%variables%%(.*?)%%variables%%', block_content, re.DOTALL | re.IGNORECASE)
+            declarations = {}
+            clean_content = block_content
+
+            if var_block_match:
+                var_block = var_block_match.group(1)
+                clean_content = re.sub(r'%%variables%%.*?%%variables%%', '', block_content, flags=re.DOTALL | re.IGNORECASE).strip()
+                
+                lines = var_block.strip().split('\n')
+                for line in lines:
+                    line = line.strip()
+                    if not line.startswith('%'): continue
+                    
+                    match_var = re.match(r'%(\w+)\s*[:=]\s*(.*)', line)
+                    if match_var:
+                        var_name = match_var.group(1)
+                        raw_val = match_var.group(2).strip()
+                        
+                        if raw_val.startswith('<raw>{'):
+                            items = raw_val[6:-1].split(';')
+                            declarations[var_name] = [i.strip() for i in items]
+                        elif raw_val.startswith('{') or (raw_val.startswith('[') and ';' in raw_val):
+                            content = raw_val[1:-1]
+                            items = [i.strip() for i in content.split(';')]
+                            declarations[var_name] = items
+                        elif raw_val.startswith('['):
+                            try:
+                                content = raw_val[1:-1]
+                                params = [float(x.strip()) for x in content.split(',')]
+                                if len(params) == 3:
+                                    start, stop, step = params
+                                    arr = np.arange(start, stop + step/2, step).tolist()
+                                    declarations[var_name] = [int(v) if float(v).is_integer() else v for v in arr]
+                            except: pass
+
+            # Tính tổ hợp và gán biến cục bộ cho khối này dựa trên Seed
+            chosen_vars = {}
+            if declarations:
+                total_combinations = 1
+                for v in declarations.values():
+                    if v: total_combinations *= len(v)
+
+                if total_combinations > 0:
+                    current_index = max(0, seed_int - 1) % total_combinations
+                    temp_idx = current_index
+                    for var_name, values in declarations.items():
+                        if values:
+                            length = len(values)
+                            chosen_vars[var_name] = values[temp_idx % length]
+                            temp_idx = temp_idx // length
+                            
+# Xử lý Toán học cục bộ
+            def eval_math(math_match):
+                expr = math_match.group(1).strip()
+                
+                # --- SỬA LỖI Ở ĐÂY: Nếu chỉ là tên biến đơn giản (VD: @menhde@), trả về giá trị thô luôn
+                if expr in chosen_vars:
+                    return str(chosen_vars[expr])
+                
+                # Nếu là biểu thức phức tạp (VD: @a + b@) thì mới bắt đầu xử lý tiếp
+                expr = expr.replace('^', '**')
+                
+                words = re.findall(r'\b[a-zA-Z_]\w*\b', expr)
+                math_funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan', 'exp', 'log', 'ln', 'simplify', 'diff', 'integrate', 'limit', 'lim', 'root', 'sqrt', 'oo', 'inf', 'Sum', 'Rational', 'Symbol', 'Eq', 'And', 'Piecewise', 'doit', 'removeO', 'series', 'subs', 'Subs', 'Derivative', 'pi', 'x', 'y', 'z', 'k', 'n', 'p']
+                
+                for word in words:
+                    if word not in chosen_vars and word not in math_funcs:
+                        return f"\\text{{[LỖI: Biến '{word}' chưa được khai báo trong khối {block_name}]}}"
+
+                sorted_vars = sorted(chosen_vars.keys(), key=len, reverse=True)
+                for var_name in sorted_vars:
+                    val = str(chosen_vars[var_name])
+                    expr = re.sub(rf'\b{var_name}\b', val, expr)
+                
+                try:
+                    safe_dict = {
+                        'sp': sp, 'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan, 
+                        'asin': sp.asin, 'acos': sp.acos, 'atan': sp.atan,
+                        'arcsin': sp.asin, 'arccos': sp.acos, 'arctan': sp.atan,
+                        'exp': sp.exp, 'log': sp.log, 'ln': sp.ln, 'sqrt': sp.sqrt,
+                        'limit': sp.limit, 'lim': sp.limit, 'integrate': sp.integrate,
+                        'diff': sp.diff, 'simplify': sp.simplify, 'oo': sp.oo, 'inf': sp.oo,
+                        'Rational': sp.Rational, 'Sum': sp.Sum, 'Symbol': sp.Symbol,
+                        'Eq': sp.Eq, 'And': sp.And, 'Piecewise': sp.Piecewise,
+                        'Subs': sp.Subs, 'Derivative': sp.Derivative, 'x': sp.Symbol('x'), 
+                        'k': sp.Symbol('k'), 'n': sp.Symbol('n'), 'p': sp.Symbol('p'), 'pi': sp.pi
+                    }
+                    result = eval(expr, {"__builtins__": {'abs': abs, 'int': int, 'float': float}}, safe_dict)
+                    
+                    if hasattr(result, 'doit') and not isinstance(result, type):
+                        result = result.doit()
+                    
+                    if isinstance(result, float) and result.is_integer():
+                        result = int(result)
+                    elif hasattr(result, 'is_Float') and getattr(result, 'is_Float') and int(result) == result:
+                        result = int(result)
+                        
+                    return sp.latex(result)
+                except Exception as e:
+                    return f"\\text{{[LỖI Toán học tại {block_name}: {str(e)}]}}"
+
+            # Trả về nội dung khối đã được xử lý
+            return re.sub(r'@(.*?)@', eval_math, clean_content)
+
+        # QUAN TRỌNG: Quét toàn bộ template gốc, tìm các khối %<tên>% ... %</tên>% và gọi hàm xử lý
+        final_document = re.sub(r'%<([^>]+)>%(.*?)%</\1>%', process_block, template_text, flags=re.DOTALL)
+        return final_document
+
+    return generate_instance
 
 with app.app_context():
     db.create_all()
@@ -309,6 +434,7 @@ def download_pdf():
     import os
     import subprocess
     import io
+    import shutil
 
     pdf_memory = None
 
@@ -316,31 +442,52 @@ def download_pdf():
         tex_file_path = os.path.join(tempdir, 'exam.tex')
         pdf_file_path = os.path.join(tempdir, 'exam.pdf')
 
+        # 1. Ghi file nội dung TEX
         with open(tex_file_path, 'w', encoding='utf-8') as f:
             f.write(tex_content)
 
+        # 2. CHÌA KHÓA: Trỏ đường dẫn tuyệt đối dựa trên vị trí của app.py
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        cls_path_source = os.path.join(basedir, 'fami-exam.cls')
+        
+        if os.path.exists(cls_path_source):
+            shutil.copy(cls_path_source, tempdir)
+        else:
+            # Thêm chữ 'r' phía trước chuỗi để fix lỗi invalid escape sequence \C
+            print(r"\n[CẢNH BÁO] Không tìm thấy file fami-exam.cls ở thư mục dự án. Biên dịch có thể lỗi!\n")
+
+        # 3. Gọi lệnh biên dịch ngay bên trong thư mục tạm
         try:
             process = subprocess.run(
-                ['pdflatex', '-interaction=nonstopmode', '-output-directory', tempdir, tex_file_path],
+                ['pdflatex', '-interaction=nonstopmode', 'exam.tex'], 
+                cwd=tempdir,
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE, 
                 text=True
             )
             
             if process.returncode != 0:
-                print("\n=== LỖI BIÊN DỊCH MIKTEX ===")
-                print(process.stdout)
-                print("============================\n")
-                flash('Có lỗi cú pháp khi biên dịch PDF. Hãy xem Terminal (VS Code) để biết chi tiết!', 'danger')
+                print("\n=== LỖI BIÊN DỊCH MIKTEX CỤ THỂ ===")
+                log_lines = process.stdout.split('\n')
+                print('\n'.join(log_lines[-20:]))
+                print("======================================\n")
+                
+                flash('Có lỗi cú pháp LaTeX. Hãy mở Terminal (VS Code) xem chi tiết!', 'danger')
                 return redirect(url_for('teacher_dashboard'))
                 
             with open(pdf_file_path, 'rb') as f:
                 pdf_memory = io.BytesIO(f.read())
 
         except Exception as e:
-            print("Lỗi gọi lệnh hệ thống:", str(e))
-            flash('Không thể gọi phần mềm MiKTeX. Vui lòng kiểm tra lại cấu hình.', 'danger')
+            print("Lỗi hệ thống khi gọi MiKTeX:", str(e))
+            flash('Không thể gọi lệnh pdflatex. Hãy chắc chắn bạn đã cài MiKTeX và thêm vào biến môi trường PATH.', 'danger')
             return redirect(url_for('teacher_dashboard'))
+
+    if pdf_memory:
+        return send_file(pdf_memory, as_attachment=True, download_name='De_Thi_Giai_Tich.pdf', mimetype='application/pdf')
+    else:
+        flash('Lỗi đọc file PDF.', 'danger')
+        return redirect(url_for('teacher_dashboard'))
 
     if pdf_memory:
         return send_file(pdf_memory, as_attachment=True, download_name='De_Thi_Giai_Tich.pdf', mimetype='application/pdf')
@@ -547,6 +694,100 @@ def student_join_class():
         })
     else:
         return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
+
+
+# API: Nhận Template và trả về danh sách các biến thể đã sinh
+@app.route('/api/custom-exam/process-template', methods=['POST'])
+@login_required
+def api_process_template():
+    data = request.get_json()
+    template = data.get('template', '')
+    seeds_str = str(data.get('seeds', '1')).strip()
+    
+    # Tách chuỗi nhập vào thành danh sách các số nguyên
+    seeds = []
+    for s in seeds_str.split(','):
+        try:
+            seeds.append(int(s.strip()))
+        except ValueError:
+            pass
+            
+    if not seeds:
+        seeds = [1] # Mặc định là seed 1 nếu nhập sai
+    
+    try:
+        gen_func = parse_advanced_template(template)
+        variants = []
+        for s in seeds:
+            variants.append({
+                'seed': s,
+                'content': gen_func(s) 
+            })
+        return jsonify({'success': True, 'variants': variants})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+# API: Lưu kết quả đã sinh vào session để xuất PDF/TEX
+@app.route('/api/custom-exam/generate-bulk', methods=['POST'])
+@login_required
+def custom_exam_generate_bulk():
+    data = request.get_json()
+    if not data or 'variants' not in data:
+        return jsonify({'success': False, 'message': 'Không có dữ liệu!'})
+
+    variants = data['variants']
+    tex_content = ""
+    preamble = ""
+    body_content = ""
+
+    for idx, v in enumerate(variants):
+        content = str(v['content']).replace('\\(', '$').replace('\\)', '$')
+        
+        # Regex siêu mạnh: Bắt bất chấp khoảng trắng thừa
+        match = re.search(r'\\begin\s*\{document\}(.*?)\\end\s*\{document\}', content, re.DOTALL)
+        
+        if match:
+            if idx == 0:
+                preamble = content[:match.start()] + "\\begin{document}\n"
+            body_content += f"\\begin{{center}}\\Large\\textbf{{MÃ ĐỀ: {v['seed']}}}\\end{{center}}\n\n"
+            body_content += match.group(1).strip() + "\n\\newpage\n"
+        else:
+            # Fallback an toàn nếu template quên mất \begin{document}
+            title = data.get('exam_title', 'Đề thi Tùy chỉnh')
+            if idx == 0:
+                preamble = f"\\documentclass[12pt, a4paper]{{article}}\n\\usepackage[utf8]{{vietnam}}\n\\usepackage{{amsmath}}\n\\begin{{document}}\n\\begin{{center}}\\Large\\textbf{{{title}}}\\end{{center}}\n\n"
+            
+            # Quét dọn rác tránh xung đột LaTeX
+            clean_content = re.sub(r'\\documentclass\[.*?\]\{.*?\}|\\documentclass\{.*?\}', '', content)
+            clean_content = re.sub(r'\\usepackage\[.*?\]\{.*?\}|\\usepackage\{.*?\}', '', clean_content)
+            body_content += f"\\textbf{{[Mã đề: {v['seed']}]}}\n\n {clean_content} \n\n\\vspace{{1cm}}\n"
+
+    if preamble:
+        tex_content = preamble + body_content + "\\end{document}"
+
+    session['current_exam_tex'] = tex_content
+    session.modified = True
+    return jsonify({'success': True})
+
+# API: Tải file mẫu (.cls, .tex)
+@app.route('/download/sample/<filename>')
+@login_required
+def download_sample(filename):
+    # CHỐT CHẶN BẢO MẬT: Chỉ cho phép tải đúng 3 file này
+    allowed_files = ['fami-exam.cls']
+    if filename not in allowed_files:
+        abort(404) # Trả về lỗi 404 nếu cố tình tải file khác
+
+    # Trỏ đến thư mục gốc chứa các file này
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    file_path = os.path.join(basedir, filename)
+
+    if os.path.exists(file_path):
+        # as_attachment=True sẽ ép trình duyệt tải file về thay vì mở trực tiếp trên tab mới
+        return send_file(file_path, as_attachment=True)
+    else:
+        flash(f'Không tìm thấy file {filename} trên hệ thống!', 'danger')
+        return redirect(url_for('teacher_dashboard'))
 
 if __name__ == '__main__':
     app.run(debug=True)

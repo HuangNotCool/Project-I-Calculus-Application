@@ -1,36 +1,74 @@
 {% extends 'base.html' %}
 {% block content %}
 
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+
+<style>
+    /* Chỉnh cho CodeMirror lấp đầy khung và font chữ giống VS Code */
+    .CodeMirror {
+        height: 100% !important;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 15px;
+        line-height: 1.6;
+        border-radius: 0.375rem;
+    }
+    
+    /* Hiệu ứng chuyển động mượt mà khi ẩn/hiện cột */
+    .transition-all {
+        transition: all 0.3s ease-in-out;
+    }
+</style>
+
+
 <div class="row mt-4" data-aos="fade-up">
-    <div class="col-lg-3 mb-4">
+    <!-- THÊM ID sidebarMenu ĐỂ ĐIỀU KHIỂN ẨN/HIỆN -->
+    <div class="col-lg-3 mb-4 transition-all" id="sidebarMenu">
         <div class="card shadow-sm border-0 rounded-4 sticky-top bg-body" style="top: 100px;">
-            <div class="card-header text-white text-center py-4 border-0 rounded-top-4" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
+            <div class="card-header text-white text-center py-4 border-0 rounded-top-4"
+                style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
                 <i class="fa-solid fa-chalkboard-user display-4 mb-2"></i>
                 <h5 class="mb-0 fw-bold">Khu vực Giảng viên</h5>
                 <span class="badge bg-light text-primary mt-2 px-3 py-1 rounded-pill">{{ current_user.username }}</span>
             </div>
-            
-            <div class="list-group list-group-flush rounded-bottom-4 nav nav-pills p-2" role="tablist">
-                <a class="list-group-item list-group-item-action active fw-bold py-3 mb-1 rounded-3 border-0" id="nav-class-tab" data-bs-toggle="pill" href="#tab-class-management" role="tab">
+
+            <div class="list-group list-group-flush nav nav-pills p-2" role="tablist">
+                <a class="list-group-item list-group-item-action fw-bold py-3 mb-1 rounded-3 border-0"
+                    id="nav-class-tab" data-bs-toggle="pill" href="#tab-class-management" role="tab">
                     <i class="fa-solid fa-users-chalkboard me-2"></i> Quản lý Lớp học
                 </a>
-                <a class="list-group-item list-group-item-action fw-bold py-3 mb-1 rounded-3 border-0" id="nav-exam-tab" data-bs-toggle="pill" href="#tab-exam-generator" role="tab">
+                <a class="list-group-item list-group-item-action active fw-bold py-3 mb-1 rounded-3 border-0"
+                    id="nav-exam-tab" data-bs-toggle="pill" href="#tab-exam-generator" role="tab">
                     <i class="fa-solid fa-wand-magic-sparkles me-2"></i> Trình Sinh Đề Tự Động
                 </a>
                 <a class="list-group-item list-group-item-action fw-bold py-3 rounded-3 border-0" href="#">
                     <i class="fa-solid fa-database me-2"></i> Ngân hàng câu hỏi (Dev)
                 </a>
             </div>
+
+            <!-- KHU VỰC TẢI FILE MẪU -->
+            <hr class="mx-3 mt-1 mb-3 border-secondary-subtle">
+            <div class="px-3 pb-3">
+                <div class="text-muted fw-bold small text-uppercase mb-3"><i class="fa-solid fa-file-arrow-down me-2"></i>Tải file mẫu</div>
+                <a href="/download/sample/fami-exam.cls" class="btn btn-outline-secondary w-100 mb-2 text-start px-3 fw-bold bg-body-tertiary feature-card-hover" style="color: #c92a2a; border-color: #dee2e6;">
+                    <i class="fa-solid fa-download me-2"></i>fami-exam.cls
+                </a>
+            </div>
         </div>
     </div>
 
-    <div class="col-lg-9">
+    <!-- THÊM ID mainWorkspace ĐỂ KÉO GIÃN -->
+    <div class="col-lg-9 transition-all" id="mainWorkspace">
         <div class="tab-content" id="teacherTabContent">
 
-            <div class="tab-pane fade show active" id="tab-class-management" role="tabpanel">
+            <div class="tab-pane fade" id="tab-class-management" role="tabpanel">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h3 class="fw-bold text-primary mb-0"><i class="fa-solid fa-chalkboard me-2"></i>Lớp Học Của Tôi</h3>
-                    <button class="btn px-4 py-2 rounded-pill fw-bold shadow-sm hover-lift" style="background-color: #ff6600; color: white;" data-bs-toggle="modal" data-bs-target="#createClassModal">
+                    <h3 class="fw-bold text-primary mb-0"><i class="fa-solid fa-chalkboard me-2"></i>Lớp Học Của Tôi
+                    </h3>
+                    <button class="btn px-4 py-2 rounded-pill fw-bold shadow-sm hover-lift"
+                        style="background-color: #ff6600; color: white;" data-bs-toggle="modal"
+                        data-bs-target="#createClassModal">
                         <i class="fa-solid fa-plus me-2"></i>Tạo Lớp Mới
                     </button>
                 </div>
@@ -41,29 +79,39 @@
                         <div class="card border-0 shadow-sm rounded-4 h-100 feature-card-hover bg-body">
                             <div class="card-body p-4 d-flex flex-column">
                                 <div class="d-flex justify-content-between align-items-start mb-3">
-                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle shadow-sm" style="width: 55px; height: 55px; background-color: #e0f0ff; color: #007bff;">
+                                    <div class="d-inline-flex align-items-center justify-content-center rounded-circle shadow-sm"
+                                        style="width: 55px; height: 55px; background-color: #e0f0ff; color: #007bff;">
                                         <i class="fa-solid fa-graduation-cap fs-3"></i>
                                     </div>
                                     <div class="text-end d-flex flex-column align-items-end">
                                         <div class="d-flex align-items-center gap-2 mb-1">
                                             <span class="d-block text-muted small fw-bold">MÃ THAM GIA:</span>
-                                            <button onclick="deleteClass({{ c.id }})" class="btn btn-sm btn-outline-danger border-0 rounded-circle" title="Xóa lớp học này">
+                                            <button onclick="deleteClass({{ c.id }})"
+                                                class="btn btn-sm btn-outline-danger border-0 rounded-circle"
+                                                title="Xóa lớp học này">
                                                 <i class="fa-solid fa-trash"></i>
                                             </button>
                                         </div>
-                                        <span class="badge bg-success rounded-pill px-3 py-2 fw-bold fs-6 shadow-sm font-monospace">{{ c.code }}</span>
+                                        <span
+                                            class="badge bg-success rounded-pill px-3 py-2 fw-bold fs-6 shadow-sm font-monospace">{{
+                                            c.code }}</span>
                                     </div>
                                 </div>
                                 <h4 class="fw-bold text-body mb-1">{{ c.name }}</h4>
-                                <p class="text-muted mb-3"><i class="fa-regular fa-clock me-1"></i> {{ c.description if c.description else 'Không có mô tả' }}</p>
-                                
+                                <p class="text-muted mb-3"><i class="fa-regular fa-clock me-1"></i> {{ c.description if
+                                    c.description else 'Không có mô tả' }}</p>
+
                                 <div class="d-flex align-items-center text-body mb-4 bg-body-tertiary p-2 rounded-3">
-                                    <i class="fa-solid fa-users text-primary me-2 ms-2"></i> <span class="fw-bold me-1 text-success">{{ c.students|length if c.students else 0 }}</span> Sinh viên đã tham gia
+                                    <i class="fa-solid fa-users text-primary me-2 ms-2"></i> <span
+                                        class="fw-bold me-1 text-success">{{ c.students|length if c.students else 0
+                                        }}</span> Sinh viên đã tham gia
                                 </div>
-                                
+
                                 <div class="d-flex gap-2 mt-auto">
-                                    <button class="btn btn-outline-primary rounded-pill w-50 fw-bold hover-lift" onclick="viewClassStudents({{ c.id }})">Xem Danh sách</button>
-                                    <button class="btn rounded-pill w-50 fw-bold text-white hover-lift" style="background-color: #007bff;">Giao Bài Tập</button>
+                                    <button class="btn btn-outline-primary rounded-pill w-50 fw-bold hover-lift"
+                                        onclick="viewClassStudents({{ c.id }})">Xem Danh sách</button>
+                                    <button class="btn rounded-pill w-50 fw-bold text-white hover-lift"
+                                        style="background-color: #007bff;">Giao Bài Tập</button>
                                 </div>
                             </div>
                         </div>
@@ -77,9 +125,13 @@
                     {% endfor %}
 
                     <div class="col-md-6 col-lg-6">
-                        <div class="card border-2 shadow-none rounded-4 h-100 bg-transparent text-center feature-card-hover" style="border-style: dashed !important; border-color: #dee2e6; cursor: pointer; min-height: 250px;" data-bs-toggle="modal" data-bs-target="#createClassModal">
-                            <div class="card-body p-5 d-flex flex-column justify-content-center align-items-center text-muted hover-opacity">
-                                <div class="rounded-circle mb-3 d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; background-color: var(--bs-tertiary-bg);">
+                        <div class="card border-2 shadow-none rounded-4 h-100 bg-transparent text-center feature-card-hover"
+                            style="border-style: dashed !important; border-color: #dee2e6; cursor: pointer; min-height: 250px;"
+                            data-bs-toggle="modal" data-bs-target="#createClassModal">
+                            <div
+                                class="card-body p-5 d-flex flex-column justify-content-center align-items-center text-muted hover-opacity">
+                                <div class="rounded-circle mb-3 d-flex align-items-center justify-content-center"
+                                    style="width: 60px; height: 60px; background-color: var(--bs-tertiary-bg);">
                                     <i class="fa-solid fa-plus fs-2 text-secondary"></i>
                                 </div>
                                 <h5 class="fw-bold text-body">Tạo thêm lớp học</h5>
@@ -90,90 +142,107 @@
                 </div>
             </div>
 
-            <div class="tab-pane fade" id="tab-exam-generator" role="tabpanel">
+            <div class="tab-pane fade show active" id="tab-exam-generator" role="tabpanel">
                 <div class="card shadow-sm border-0 rounded-4 bg-body mb-4">
-                    <div class="card-header bg-transparent border-bottom-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
+                    <!-- THÊM ID examCardHeader ĐỂ ẨN ĐI NẾU CẦN -->
+                    <div id="examCardHeader" class="card-header bg-transparent border-bottom-0 pt-4 pb-0 px-4 d-flex justify-content-between align-items-center">
                         <h4 class="mb-0 fw-bold text-primary"><i class="fa-solid fa-gears me-2"></i>Cấu Hình Sinh Đề</h4>
-                        <div class="w-50">
-                            <select class="form-select border-primary text-primary fw-bold shadow-sm rounded-pill px-3" id="topicSelect">
-                                <option value="limit" selected>Chuyên đề: Giới hạn hàm số (Lim)</option>
-                                <option value="deriv" disabled>Chuyên đề: Đạo hàm (Đang cập nhật)</option>
-                                <option value="integ" disabled>Chuyên đề: Tích phân (Đang cập nhật)</option>
-                            </select>
-                        </div>
                     </div>
 
                     <div class="card-body p-4">
                         <ul class="nav nav-tabs nav-fill mb-4 border-bottom-0 gap-2" id="generatorTabs" role="tablist">
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link active fw-bold py-3 rounded-4 border-0 bg-body-tertiary" id="random-tab" data-bs-toggle="tab" data-bs-target="#randomMode" type="button" role="tab">
+                                <button class="nav-link fw-bold py-3 rounded-4 border-0 bg-body-tertiary"
+                                    id="random-tab" data-bs-toggle="tab" data-bs-target="#randomMode" type="button"
+                                    role="tab">
                                     <i class="fa-solid fa-shuffle me-2 text-primary"></i>Sinh Ngẫu Nhiên
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
-                                <button class="nav-link fw-bold py-3 rounded-4 border-0 bg-body-tertiary" id="custom-tab" data-bs-toggle="tab" data-bs-target="#customMode" type="button" role="tab">
-                                    <i class="fa-solid fa-pen-ruler me-2" style="color: #ff6600;"></i>Sinh Tùy Chỉnh (Từng Câu)
+                                <button class="nav-link active fw-bold py-3 rounded-4 border-0 bg-body-tertiary"
+                                    id="custom-tab" data-bs-toggle="tab" data-bs-target="#customMode" type="button"
+                                    role="tab">
+                                    <i class="fa-solid fa-code me-2" style="color: #ff6600;"></i>Sinh Tùy Chỉnh (Nhập Mã Gốc)
                                 </button>
                             </li>
                         </ul>
 
                         <div class="tab-content" id="generatorTabsContent">
-                            
-                            <div class="tab-pane fade show active" id="randomMode" role="tabpanel">
+
+                            <div class="tab-pane fade" id="randomMode" role="tabpanel">
                                 <form id="randomExamForm" onsubmit="event.preventDefault(); generateExamAjax();">
                                     <div class="mb-4">
                                         <label class="form-label fw-bold">Tiêu đề kỳ thi:</label>
-                                        <input type="text" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" name="exam_title" placeholder="VD: Đề thi Giữa kỳ Giải tích 1 - K68..." required>
+                                        <input type="text"
+                                            class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3"
+                                            name="exam_title" placeholder="VD: Đề thi Giữa kỳ Giải tích 1 - K68..."
+                                            required>
                                     </div>
-
                                     <div class="row g-4 bg-body-tertiary p-4 rounded-4 border-0">
                                         <div class="col-md-12">
                                             <label class="form-label fw-bold">1. Mức độ phức tạp:</label>
-                                            <select class="form-select border-0 shadow-sm rounded-3 py-2" name="difficulty" id="randomDifficulty" onchange="toggleRandomQuantityInputs()">
-                                                <option value="easy">Chỉ sinh mức Cơ bản (Đa thức, giới hạn hữu hạn)</option>
-                                                <option value="medium" selected>Chỉ sinh mức Khá (Dạng 0/0, vô cực, lượng giác cơ bản)</option>
-                                                <option value="hard">Chỉ sinh mức Khó (Lượng giác phức tạp, L'Hopital)</option>
-                                                <option value="mixed" class="fw-bold text-primary">TỔNG HỢP (Tùy chỉnh số lượng 3 mức độ)</option>
+                                            <select class="form-select border-0 shadow-sm rounded-3 py-2"
+                                                name="difficulty" id="randomDifficulty"
+                                                onchange="toggleRandomQuantityInputs()">
+                                                <option value="easy">Chỉ sinh mức Cơ bản (Đa thức, giới hạn hữu hạn)
+                                                </option>
+                                                <option value="medium" selected>Chỉ sinh mức Khá (Dạng 0/0, vô cực,
+                                                    lượng giác cơ bản)</option>
+                                                <option value="hard">Chỉ sinh mức Khó (Lượng giác phức tạp, L'Hopital)
+                                                </option>
+                                                <option value="mixed" class="fw-bold text-primary">TỔNG HỢP (Tùy chỉnh
+                                                    số lượng 3 mức độ)</option>
                                             </select>
                                         </div>
-
                                         <div class="col-md-12" id="singleQuantityArea">
                                             <label class="form-label fw-bold">2. Số lượng câu hỏi:</label>
-                                            <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2" name="quantity" value="10" min="1" max="50">
+                                            <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
+                                                name="quantity" value="10" min="1" max="50">
                                         </div>
-
                                         <div class="col-md-12 d-none" id="mixedQuantityArea">
-                                            <label class="form-label fw-bold">2. Cơ cấu số lượng câu hỏi (Đề sẽ tự sắp xếp Cơ bản -> Khó):</label>
+                                            <label class="form-label fw-bold">2. Cơ cấu số lượng câu hỏi (Đề sẽ tự sắp
+                                                xếp Cơ bản -> Khó):</label>
                                             <div class="row g-3 mt-1">
                                                 <div class="col-md-4">
                                                     <div class="input-group shadow-sm rounded-3 overflow-hidden">
-                                                        <span class="input-group-text bg-success text-white fw-bold border-0">Cơ bản</span>
-                                                        <input type="number" class="form-control border-0 text-center fw-bold" name="qty_easy" placeholder="Số câu" value="5" min="0">
+                                                        <span
+                                                            class="input-group-text bg-success text-white fw-bold border-0">Cơ
+                                                            bản</span>
+                                                        <input type="number"
+                                                            class="form-control border-0 text-center fw-bold"
+                                                            name="qty_easy" placeholder="Số câu" value="5" min="0">
                                                     </div>
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="input-group shadow-sm rounded-3 overflow-hidden">
-                                                        <span class="input-group-text bg-warning text-dark fw-bold border-0">Khá</span>
-                                                        <input type="number" class="form-control border-0 text-center fw-bold" name="qty_medium" placeholder="Số câu" value="3" min="0">
+                                                        <span
+                                                            class="input-group-text bg-warning text-dark fw-bold border-0">Khá</span>
+                                                        <input type="number"
+                                                            class="form-control border-0 text-center fw-bold"
+                                                            name="qty_medium" placeholder="Số câu" value="3" min="0">
                                                     </div>
                                                 </div>
                                                 <div class="col-md-4">
                                                     <div class="input-group shadow-sm rounded-3 overflow-hidden">
-                                                        <span class="input-group-text bg-danger text-white fw-bold border-0">Khó</span>
-                                                        <input type="number" class="form-control border-0 text-center fw-bold" name="qty_hard" placeholder="Số câu" value="2" min="0">
+                                                        <span
+                                                            class="input-group-text bg-danger text-white fw-bold border-0">Khó</span>
+                                                        <input type="number"
+                                                            class="form-control border-0 text-center fw-bold"
+                                                            name="qty_hard" placeholder="Số câu" value="2" min="0">
                                                     </div>
                                                 </div>
                                             </div>
-                                            <small class="text-muted mt-2 d-block">
-                                                <i class="fa-solid fa-circle-info me-1 text-primary"></i> Đề thi tổng hợp sẽ tính theo số câu bạn nhập ở trên.
-                                            </small>
                                         </div>
-
                                         <div class="col-12 text-end mt-4 border-top pt-4 border-secondary-subtle">
-                                            <div id="successAlert" class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3">
-                                                <i class="fa-solid fa-circle-check me-2"></i><strong>Thành công!</strong> Đã sinh xong đề thi, cấu trúc và đáp án đã được chốt. Vui lòng chọn định dạng xuất file bên dưới.
+                                            <div id="successAlert"
+                                                class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3">
+                                                <i class="fa-solid fa-circle-check me-2"></i><strong>Thành
+                                                    công!</strong> Đã sinh xong đề thi. Vui lòng chọn định dạng xuất
+                                                file bên dưới.
                                             </div>
-                                            <button type="submit" id="btnGenerate" class="btn px-5 py-2 rounded-pill fw-bold shadow hover-lift text-white" style="background-color: #ff6600;">
+                                            <button type="submit" id="btnGenerate"
+                                                class="btn px-5 py-2 rounded-pill fw-bold shadow hover-lift text-white"
+                                                style="background-color: #ff6600;">
                                                 <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Tạo Đề Ngay
                                             </button>
                                         </div>
@@ -181,144 +250,91 @@
                                 </form>
                             </div>
 
-                            <div class="tab-pane fade" id="customMode" role="tabpanel">
+                            <div class="tab-pane fade show active" id="customMode" role="tabpanel">
                                 <div class="mb-4">
                                     <label class="form-label fw-bold">Tiêu đề kỳ thi tùy chỉnh:</label>
                                     <input type="text" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" id="customExamTitle" placeholder="VD: Đề kiểm tra 15 phút - Lớp 102...">
                                 </div>
-
-                                <div class="bg-body-tertiary p-4 rounded-4 border-0 mb-4 shadow-sm">
-                                    <h5 class="fw-bold text-primary mb-3 border-bottom border-secondary-subtle pb-2">Công cụ Thêm câu hỏi</h5>
-                                    <form id="addCustomQuestionForm" onsubmit="event.preventDefault(); addCustomQuestion();">
-                                        <div class="row g-3">
-                                            <div class="col-md-12">
-                                                <label class="form-label fw-bold text-secondary">Chọn dạng biểu thức:</label>
-                                                <select class="form-select border-0 shadow-sm rounded-3 py-2" name="expr_type" id="expressionType" onchange="toggleCustomInputs()">
-                                                    <option value="template_1" selected>Dạng phân thức: (ax^2 + bx + c) / Mẫu số</option>
-                                                    <option value="template_2">Dạng lượng giác: sin(ax) / (bx)</option>
-                                                    <option value="template_3">Dạng vô tỉ: (sqrt(ax + b) - sqrt(b)) / x</option>
-                                                    <option value="custom" class="fw-bold text-primary">Nhập tay biểu thức (Bàn phím ảo)</option>
-                                                </select>
+    
+                                <div class="row g-4 h-100">
+                                    <div class="col-xl-6 d-flex flex-column h-100">
+                                        <div class="bg-body-tertiary p-4 rounded-4 border-0 shadow-sm flex-grow-1 d-flex flex-column">
+                                            <div class="d-flex justify-content-between align-items-center border-bottom border-secondary-subtle pb-3 mb-3">
+                                                <h5 class="fw-bold text-primary mb-0"><i class="fa-solid fa-code me-2"></i>Soạn Thảo</h5>
+                                                <button class="btn btn-sm btn-outline-secondary fw-bold rounded-pill shadow-sm bg-body" type="button" onclick="insertSampleTemplate()">
+                                                    <i class="fa-solid fa-lightbulb text-warning me-1"></i> Chèn mẫu
+                                                </button>
                                             </div>
-
-                                            <div class="col-md-4">
-                                                <label class="form-label fw-bold text-secondary">x tiến tới ($x \to ?$):</label>
-                                                <input type="text" class="form-control fw-bold text-primary border-0 shadow-sm rounded-3 py-2" name="limit_val" placeholder="VD: 0, 1, oo">
-                                            </div>
-
-                                            <div class="col-md-8" id="coefficientArea">
-                                                <label class="form-label fw-bold text-secondary">Tùy chỉnh hệ số (a, b, c):</label>
-                                                <div class="d-flex align-items-center gap-3 mt-1">
-                                                    <div class="form-check form-switch">
-                                                        <input class="form-check-input" type="checkbox" id="randomCoeff" onchange="toggleCoeffInputs()" checked>
-                                                        <input type="hidden" name="is_random" id="isRandomHidden" value="true">
-                                                        <label class="form-check-label" for="randomCoeff">Hệ số ngẫu nhiên</label>
+    
+                                            <form id="templateForm" class="d-flex flex-column flex-grow-1">
+                                                <!-- Chiều cao Editor được tăng lên 75vh để rộng rãi -->
+                                                <div class="flex-grow-1 border-0 rounded-3 overflow-hidden shadow-sm mb-3" style="height: 75vh;">
+                                                    <textarea id="templateInput" name="templateInput"></textarea>
+                                                </div>
+    
+                                                <div class="row align-items-end mt-auto pt-3">
+                                                    <div class="col-md-7">
+                                                        <label class="form-label fw-bold text-primary small mb-1"><i class="fa-solid fa-hashtag me-1"></i>Mã Seed (Số nguyên):</label>
+                                                        <div class="input-group">
+                                                            <input type="text" id="seedInput" class="form-control rounded-3 border-secondary-subtle fw-bold" value="1" placeholder="VD: 1, 5, 10, 99...">
+                                                        </div>
+                                                        <small class="text-muted d-block mt-1" style="font-size: 11px;">Nhập các số nguyên cách nhau bởi dấu phẩy. Vượt quá số lượng sẽ tự lặp lại.</small>
                                                     </div>
-                                                    <div id="manualCoeffs" class="d-none d-flex gap-2">
-                                                        <input type="number" name="a" class="form-control form-control-sm border-0 shadow-sm rounded-3" placeholder="a=" style="width: 70px;">
-                                                        <input type="number" name="b" class="form-control form-control-sm border-0 shadow-sm rounded-3" placeholder="b=" style="width: 70px;">
-                                                        <input type="number" name="c" class="form-control form-control-sm border-0 shadow-sm rounded-3" placeholder="c=" style="width: 70px;">
+                                                    <div class="col-md-5 text-end">
+                                                        <button type="button" id="btnPreviewTemplate" onclick="previewAdvancedTemplate()" class="btn btn-primary fw-bold shadow hover-lift px-4 py-2 rounded-3 w-100 h-100 d-flex align-items-center justify-content-center">
+                                                            <i class="fa-solid fa-play me-2"></i>Xem trước
+                                                        </button>
                                                     </div>
                                                 </div>
-                                            </div>
-
-                                            <div class="col-md-12 d-none" id="customExprArea">
-                                                <label class="form-label fw-bold text-secondary mt-3">Nhập biểu thức bằng bàn phím Toán học:</label>
-                                                <input type="text" name="custom_expr" id="customExprInput" class="form-control form-control-lg text-primary font-monospace fs-4 shadow-sm border-0 mb-3 rounded-3" placeholder="Nhập vào đây..." autocomplete="off">
-                                                
-                                                <div class="card border-0 shadow-sm bg-body rounded-4 p-3">
-                                                    <div class="row g-2">
-                                                        <div class="col-md-7">
-                                                            <div class="d-grid gap-2" style="grid-template-columns: repeat(4, 1fr);">
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('7')">7</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('8')">8</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('9')">9</button>
-                                                                <button type="button" class="btn btn-warning shadow-sm fw-bold fs-5" onclick="insertMath('/')">÷</button>
-
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('4')">4</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('5')">5</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('6')">6</button>
-                                                                <button type="button" class="btn btn-warning shadow-sm fw-bold fs-5" onclick="insertMath('*')">×</button>
-
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('1')">1</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('2')">2</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('3')">3</button>
-                                                                <button type="button" class="btn btn-warning shadow-sm fw-bold fs-5" onclick="insertMath('-')">-</button>
-
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('0')">0</button>
-                                                                <button type="button" class="btn btn-light border shadow-sm fw-bold fs-5" onclick="insertMath('.')">.</button>
-                                                                <button type="button" class="btn btn-primary shadow-sm fw-bold fs-5" onclick="insertMath('x')">x</button>
-                                                                <button type="button" class="btn btn-warning shadow-sm fw-bold fs-5" onclick="insertMath('+')">+</button>
-                                                            </div>
-                                                        </div>
-                                                        <div class="col-md-5">
-                                                            <div class="d-grid gap-2" style="grid-template-columns: repeat(3, 1fr);">
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold" onclick="insertMath('**')">a<sup class="small">b</sup></button>
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold" onclick="insertMath('sqrt()')">√</button>
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold text-danger" onclick="insertMath('oo')">∞</button>
-
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold" onclick="insertMath('(')">(</button>
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold" onclick="insertMath(')')">)</button>
-                                                                <button type="button" class="btn btn-outline-secondary bg-body shadow-sm fw-bold" onclick="insertMath('exp()')">e<sup class="small">x</sup></button>
-
-                                                                <button type="button" class="btn btn-outline-info bg-body shadow-sm fw-bold" onclick="insertMath('sin()')">sin</button>
-                                                                <button type="button" class="btn btn-outline-info bg-body shadow-sm fw-bold" onclick="insertMath('cos()')">cos</button>
-                                                                <button type="button" class="btn btn-outline-info bg-body shadow-sm fw-bold" onclick="insertMath('tan()')">tan</button>
-
-                                                                <button type="button" class="btn btn-danger shadow-sm fw-bold" onclick="backspaceMath()" style="grid-column: span 2;"><i class="fa-solid fa-delete-left me-1"></i> Xóa</button>
-                                                                <button type="button" class="btn btn-secondary shadow-sm fw-bold" onclick="clearMath()">C</button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            </form>
                                         </div>
-
-                                        <div class="text-end mt-4">
-                                            <button type="submit" id="btnAddCustom" class="btn btn-success fw-bold shadow hover-lift px-4 py-2 rounded-pill">
-                                                <i class="fa-solid fa-plus me-2"></i>Thêm Câu Này Vào Đề
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h5 class="fw-bold mb-0 text-primary"><i class="fa-solid fa-list-check me-2"></i>Đề bài đang soạn (Preview)</h5>
-                                    <span class="badge bg-primary fs-6 rounded-pill px-3 py-2" id="customCountBadge">Tổng: 0 câu</span>
-                                </div>
-                                
-                                <ul class="list-group mb-4 shadow-sm rounded-4" id="customQuestionsList">
-                                    <li class="list-group-item p-4 bg-body-tertiary text-center text-muted border-0" id="emptyListMsg">
-                                        <i class="fa-solid fa-folder-open fs-2 mb-2 opacity-50 d-block"></i>
-                                        <em>Chưa có câu hỏi nào. Hãy sử dụng công cụ bên trên để thêm câu hỏi nhé!</em>
-                                    </li>
-                                </ul>
-
-                                <div class="border-top border-secondary-subtle pt-4 text-end">
-                                    <div id="customSuccessAlert" class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3">
-                                        <i class="fa-solid fa-circle-check me-2"></i><strong>Tuyệt vời!</strong> Đề tùy chỉnh đã được gộp lại. Bạn có thể xuất file ở góc dưới cùng màn hình.
                                     </div>
-                                    <button type="button" id="btnGenerateCustom" onclick="generateCustomExam()" class="btn btn-primary px-5 py-2 rounded-pill fw-bold shadow hover-lift" disabled>
-                                        <i class="fa-solid fa-layer-group me-2"></i>Gộp Đề & Sẵn Sàng Xuất File
-                                    </button>
+    
+                                    <div class="col-xl-6 d-flex flex-column h-100">
+                                        <div class="bg-body-tertiary p-4 rounded-4 border-0 shadow-sm flex-grow-1 d-flex flex-column">
+                                            <div class="d-flex justify-content-between align-items-center border-bottom border-secondary-subtle pb-3 mb-3">
+                                                <h5 class="fw-bold text-success mb-0"><i class="fa-solid fa-eye me-2"></i>Xem Trước (Math)</h5>
+                                                <span class="badge bg-primary fs-6 rounded-pill px-3 py-2" id="variantCountBadge">0 biến thể</span>
+                                            </div>
+    
+                                            <!-- Chiều cao Preview được tăng lên 75vh -->
+                                            <ul class="list-group mb-4 shadow-sm rounded-4 flex-grow-1 overflow-auto bg-body" id="variantPreviewList" style="height: 75vh;">
+                                                <li class="list-group-item p-5 text-center text-muted border-0 h-100 d-flex flex-column justify-content-center align-items-center" id="emptyVariantMsg">
+                                                    <i class="fa-solid fa-laptop-code fs-1 opacity-25 mb-3"></i>
+                                                    <em>Nhập mã bên trái và bấm "Chạy thử" để xem trước.</em>
+                                                </li>
+                                            </ul>
+    
+                                            <div class="border-top border-secondary-subtle pt-3 text-end mt-auto">
+                                                <div id="bulkSuccessAlert" class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3 py-2 small">
+                                                    <i class="fa-solid fa-circle-check me-2"></i>Đã gộp xong. Bạn có thể lưu đề thi bên dưới!
+                                                </div>
+                                                <button type="button" id="btnGenerateBulk" onclick="generateBulkExam()" class="btn btn-success px-4 py-2 rounded-pill fw-bold shadow hover-lift w-100" disabled>
+                                                    <i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div> 
+                           </div> 
 
                         </div>
                     </div>
                     
                     <div class="card-footer bg-transparent border-top border-secondary-subtle p-4 d-flex justify-content-end gap-3 rounded-bottom-4">
-                        <a href="/download/tex" id="btnExportTex" class="btn btn-outline-primary fw-bold rounded-pill px-4 shadow-sm disabled">
+                        <a href="/download/tex" id="btnExportTex"
+                            class="btn btn-outline-primary fw-bold rounded-pill px-4 shadow-sm disabled">
                             <i class="fa-solid fa-file-code me-2"></i>Xuất .TEX
                         </a>
-                        <a href="/download/pdf" id="btnExportPdf" class="btn btn-primary fw-bold rounded-pill px-4 shadow disabled">
+                        <a href="/download/pdf" id="btnExportPdf"
+                            class="btn btn-primary fw-bold rounded-pill px-4 shadow disabled">
                             <i class="fa-solid fa-file-pdf me-2"></i>Lưu & Xuất .PDF
                         </a>
                     </div>
                 </div>
             </div>
 
-        </div> 
+        </div>
     </div>
 </div>
 
@@ -371,7 +387,6 @@
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            
             <div class="modal-body p-4 bg-body-tertiary mt-3 rounded-bottom-4">
                 <div class="list-group shadow-sm border-0 rounded-4 overflow-hidden" id="studentListContainer">
                     <div class="text-center py-5">
@@ -390,221 +405,553 @@
     .nav-tabs .nav-link:not(.active) { color: var(--bs-body-color); border: none; }
     .nav-tabs { border-bottom: none; }
     .hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
-    .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
-    .hover-opacity:hover { opacity: 0.7; }
-    .feature-card-hover { transition: transform 0.2s, box-shadow 0.2s; }
-    .feature-card-hover:hover { transform: translateY(-5px); box-shadow: 0 .5rem 1rem rgba(0,0,0,.15)!important; }
+    .hover-lift:hover { transform: translateY(-3px); box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .15) !important; }
     .w-25px { width: 25px; display: inline-block; }
+    #rawQuestionInput:focus { border-color: #ff6600; box-shadow: 0 0 0 0.25rem rgba(255, 102, 0, 0.25); outline: none; }
 </style>
 
 <script>
     // ==============================================================
-    // JS QUẢN LÝ LỚP HỌC & DANH SÁCH SINH VIÊN
+    // JS QUẢN LÝ LỚP HỌC 
     // ==============================================================
     function generateRandomCode() {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         let code = 'HUST-';
-        for (let i = 0; i < 4; i++) {
-            code += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
+        for (let i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
         document.getElementById('classCodeInput').value = code;
     }
 
     document.getElementById('createClassModal').addEventListener('show.bs.modal', function () {
-        if (document.getElementById('classCodeInput').value === 'HUST-XXXX') {
-            generateRandomCode();
-        }
+        if (document.getElementById('classCodeInput').value === 'HUST-XXXX') generateRandomCode();
     });
 
     function submitNewClass() {
         const form = document.getElementById('createClassForm');
-        if (!form.checkValidity()) {
-            form.reportValidity();
-            return;
-        }
-
+        if (!form.checkValidity()) { form.reportValidity(); return; }
         const formData = new FormData(form);
         formData.append('code', document.getElementById('classCodeInput').value);
-
         const btn = document.getElementById('btnSubmitClass');
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tạo...';
         btn.disabled = true;
-
-        fetch('/api/teacher/create-class', {
-            method: 'POST',
-            body: formData
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert("Lỗi: " + data.message);
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-        })
-        .catch(err => {
-            alert("Lỗi kết nối máy chủ!");
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        });
+        fetch('/api/teacher/create-class', { method: 'POST', body: formData })
+            .then(res => res.json()).then(data => { if (data.success) location.reload(); else { alert("Lỗi: " + data.message); btn.innerHTML = originalText; btn.disabled = false; } })
+            .catch(err => { alert("Lỗi kết nối máy chủ!"); btn.innerHTML = originalText; btn.disabled = false; });
     }
 
     function deleteClass(classId) {
-        if(confirm("Bạn có chắc chắn muốn xóa lớp học này không? Toàn bộ dữ liệu và danh sách học sinh của lớp sẽ bị xóa vĩnh viễn.")) {
-            fetch('/api/teacher/delete-class/' + classId, {
-                method: 'POST'
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert("Lỗi: " + data.message);
-                }
-            })
-            .catch(err => {
-                alert("Lỗi kết nối máy chủ!");
-            });
+        if (confirm("Bạn có chắc chắn muốn xóa lớp học này không?")) {
+            fetch('/api/teacher/delete-class/' + classId, { method: 'POST' })
+                .then(res => res.json()).then(data => { if (data.success) location.reload(); else alert("Lỗi: " + data.message); })
+                .catch(err => alert("Lỗi kết nối máy chủ!"));
         }
     }
-    
+
     function viewClassStudents(classId) {
         const modal = new bootstrap.Modal(document.getElementById('studentListModal'));
         document.getElementById('modalClassName').innerText = "Đang tải dữ liệu...";
-        document.getElementById('studentListContainer').innerHTML = `
-            <div class="text-center py-5 bg-body">
-                <i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i>
-                <p class="mt-2 text-muted fw-bold">Đang tải dữ liệu sinh viên...</p>
-            </div>
-        `;
+        document.getElementById('studentListContainer').innerHTML = `<div class="text-center py-5 bg-body"><i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i><p class="mt-2 text-muted fw-bold">Đang tải dữ liệu sinh viên...</p></div>`;
         modal.show();
-
         fetch('/api/teacher/class/' + classId + '/students')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                document.getElementById('modalClassName').innerHTML = `Lớp: <strong>${data.class_name}</strong> | Mã: <strong class="text-success">${data.class_code}</strong>`;
-                
-                const listContainer = document.getElementById('studentListContainer');
-                listContainer.innerHTML = ''; 
+            .then(res => res.json()).then(data => {
+                if (data.success) {
+                    document.getElementById('modalClassName').innerHTML = `Lớp: <strong>${data.class_name}</strong> | Mã: <strong class="text-success">${data.class_code}</strong>`;
+                    const listContainer = document.getElementById('studentListContainer');
+                    listContainer.innerHTML = '';
+                    if (data.students.length === 0) {
+                        listContainer.innerHTML = `<div class="text-center py-5 bg-body"><i class="fa-solid fa-ghost fs-1 text-muted opacity-50 mb-3"></i><h6 class="fw-bold text-muted">Chưa có sinh viên nào tham gia</h6><p class="small text-muted mb-0">Hãy chia sẻ mã lớp ${data.class_code} cho học sinh nhé!</p></div>`;
+                        return;
+                    }
+                    data.students.forEach((student, index) => {
+                        listContainer.insertAdjacentHTML('beforeend', `<div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center justify-content-between feature-card-hover"><div class="d-flex align-items-center"><span class="fw-bold text-muted me-3 w-25px">${index + 1}.</span><img src="https://ui-avatars.com/api/?name=${student.username}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm"><div><h6 class="fw-bold mb-0 text-body">${student.username}</h6><small class="text-muted">Mã SV: 202${Math.floor(Math.random() * 90000) + 10000}</small></div></div></div>`);
+                    });
+                } else { alert("Lỗi: " + data.message); modal.hide(); }
+            }).catch(err => { alert("Lỗi kết nối!"); modal.hide(); });
+    }
 
-                if (data.students.length === 0) {
-                    listContainer.innerHTML = `
-                        <div class="text-center py-5 bg-body">
-                            <i class="fa-solid fa-ghost fs-1 text-muted opacity-50 mb-3"></i>
-                            <h6 class="fw-bold text-muted">Chưa có sinh viên nào tham gia</h6>
-                            <p class="small text-muted mb-0">Hãy chia sẻ mã lớp ${data.class_code} cho học sinh nhé!</p>
-                        </div>
-                    `;
-                    return;
+    // ==============================================================
+    // JS QUẢN LÝ SINH ĐỀ VÀ GIAO DIỆN CHUYỂN TAB 
+    // ==============================================================
+    window.generatedVariants = [];
+    let templateEditor;
+
+    document.addEventListener("DOMContentLoaded", function () {
+        // Kích hoạt CodeMirror có đánh số dòng và giao diện tối (Dracula)
+        templateEditor = CodeMirror.fromTextArea(document.getElementById("templateInput"), {
+            lineNumbers: true, // Hiển thị số dòng 1, 2, 3...
+            theme: "dracula",
+            mode: "text/plain",
+            lineWrapping: true
+        });
+        templateEditor.setSize("100%", "100%"); // Phóng hết cỡ container
+    });
+    
+// --- LÔGIC MỚI: TỰ ĐỘNG PHÓNG TO KHI VÀO TAB SINH TÙY CHỈNH ---
+    
+    // Hàm phóng to không gian
+    function expandWorkspaceLayout() {
+        document.getElementById('sidebarMenu').classList.add('d-none');
+        document.getElementById('mainWorkspace').classList.replace('col-lg-9', 'col-lg-12');
+        document.getElementById('examCardHeader').classList.add('d-none');
+        setTimeout(() => { if(templateEditor) templateEditor.refresh(); }, 200);
+    }
+
+    // Hàm thu nhỏ về như cũ
+    function resetWorkspaceLayout() {
+        document.getElementById('sidebarMenu').classList.remove('d-none');
+        document.getElementById('mainWorkspace').classList.replace('col-lg-12', 'col-lg-9');
+        document.getElementById('examCardHeader').classList.remove('d-none');
+    }
+
+    // 1. Gắn sự kiện khi click chuyển đổi giữa 2 tab con
+    document.getElementById('custom-tab').addEventListener('click', expandWorkspaceLayout);
+    document.getElementById('random-tab').addEventListener('click', resetWorkspaceLayout);
+    
+    // 2. Gắn sự kiện khi click menu bên trái
+    document.getElementById('nav-class-tab').addEventListener('click', resetWorkspaceLayout);
+    document.getElementById('nav-exam-tab').addEventListener('click', function() {
+        // Nếu click vào menu Sinh Đề, kiểm tra xem tab Tùy Chỉnh có đang mở không
+        if (document.getElementById('custom-tab').classList.contains('active')) {
+            expandWorkspaceLayout();
+        } else {
+            resetWorkspaceLayout();
+        }
+    });
+
+    // 3. BẢO HIỂM QUAN TRỌNG: Tự động chạy ngay khi F5 / load trang web
+    document.addEventListener("DOMContentLoaded", function () {
+        // Đợi 100ms để Bootstrap render xong giao diện
+        setTimeout(() => {
+            if (document.getElementById('nav-exam-tab').classList.contains('active') && 
+                document.getElementById('custom-tab').classList.contains('active')) {
+                expandWorkspaceLayout();
+            }
+        }, 100);
+    });
+
+    // --- LÔGIC MỚI: THU NHỎ LẠI NHƯ CŨ KHI VÀO TAB KHÁC ---
+    function resetWorkspaceLayout() {
+        document.getElementById('sidebarMenu').classList.remove('d-none');
+        document.getElementById('mainWorkspace').classList.replace('col-lg-12', 'col-lg-9');
+        document.getElementById('examCardHeader').classList.remove('d-none');
+    }
+    
+    document.getElementById('random-tab').addEventListener('click', resetWorkspaceLayout);
+    document.getElementById('nav-class-tab').addEventListener('click', resetWorkspaceLayout);
+
+
+    // Chèn mẫu
+// Chèn mẫu đề thi Tổng hợp 10 dạng Giải tích 1
+    function insertSampleTemplate() {
+        const sampleText = `\\documentclass{fami-exam}
+
+%% Gói do người dùng tự sử dụng
+\\usepackage{amsmath, amsxtra, latexsym, amssymb, amscd,amsthm}
+\\usepackage[utf8]{vietnam}
+
+\\MaDeThi{101}
+\\HocKy{2026.1}
+\\HocPhan{Giải tích I}
+\\MaHocPhan{MI1111}
+\\GhiChu{Sinh viên không được sử dụng tài liệu}
+\\GhiChuDapAn{Thang điểm: 10. Mỗi câu 1 điểm}
+
+\\NgonNgu{ vietnamese }
+\\LoiGiai{ true }
+
+\\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 1: Phép toán cơ bản}
+%<cau1>%
+%%variables%%
+%a: [10, 50, 5]
+%b: [2, 9, 1]
+%c: [1, 20, 1]
+%%variables%%
+\\begin{question}
+Cho các số $a = @a@$, $b = @b@$, $c = @c@$. Tính giá trị của biểu thức $ A = a \\cdot b - c $.
+\\DatCot[4]
+\\Dung{$ @a * b - c@ $}
+\\Sai{$ @a * b + c@ $}
+\\Sai{$ @a * (b - c)@ $}
+\\Sai{$ @a - b * c@ $}
+    \\begin{solution}
+Ta thay số trực tiếp vào biểu thức: $ A = @a@ \\cdot @b@ - @c@ = @a*b@ - @c@ = @a*b-c@ $.
+    \\end{solution}
+\\end{question}
+%</cau1>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 2: Rút gọn phân thức}
+%<cau2>%
+%%variables%%
+%a: [2, 9, 1]
+%%variables%%
+\\begin{question}
+Rút gọn phân thức $ P = \\frac{x^2 - @a**2@}{x - @a@} $ (với $x \\neq @a@$).
+\\DatCot[4]
+\\Dung{$ @simplify((x**2 - a**2)/(x - a))@ $}
+\\Sai{$ x - @a@ $}
+\\Sai{$ x^2 + @a@ $}
+\\Sai{$ x + @a**2@ $}
+    \\begin{solution}
+Sử dụng hằng đẳng thức $ a^2 - b^2 = (a-b)(a+b) $. \\\\
+$ P = \\frac{(x - @a@)(x + @a@)}{x - @a@} = x + @a@ $.
+    \\end{solution}
+\\end{question}
+%</cau2>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 3: Giới hạn tại điểm 0}
+%<cau3>%
+%%variables%%
+%a: [2, 7, 1]
+%b: [3, 9, 1]
+%%variables%%
+\\begin{question}
+Tính giới hạn $ L = \\lim\\limits_{x \\to 0} \\frac{\\sin(@a@ x)}{@b@ x} $.
+\\DatCot[4]
+\\Dung{$ @limit(sin(a*x)/(b*x), x, 0)@ $}
+\\Sai{$ @limit(sin(b*x)/(a*x), x, 0)@ $}
+\\Sai{$ 0 $}
+\\Sai{$ 1 $}
+    \\begin{solution}
+Áp dụng vô cùng bé tương đương: Khi $ x \\to 0 $, $\\sin(@a@x) \\sim @a@x$. \\\\
+Do đó, $ L = \\lim\\limits_{x \\to 0} \\frac{@a@ x}{@b@ x} = @limit(sin(a*x)/(b*x), x, 0)@ $.
+    \\end{solution}
+\\end{question}
+%</cau3>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 4: Giới hạn tại vô cùng}
+%<cau4>%
+%%variables%%
+%a: [2, 5, 1]
+%b: [3, 7, 1]
+%%variables%%
+\\begin{question}
+Tính giới hạn $ L = \\lim\\limits_{x \\to +\\infty} \\frac{@a@ x^2 + 5x - 2}{@b@ x^2 - x + 1} $.
+\\DatCot[4]
+\\Dung{$ @limit((a*x**2 + 5*x - 2)/(b*x**2 - x + 1), x, oo)@ $}
+\\Sai{$ \\infty $}
+\\Sai{$ 0 $}
+\\Sai{$ @Rational(b, a)@ $}
+    \\begin{solution}
+Chia cả tử và mẫu cho bậc cao nhất là $x^2$: \\\\
+$ L = \\lim\\limits_{x \\to +\\infty} \\frac{@a@ + \\frac{5}{x} - \\frac{2}{x^2}}{@b@ - \\frac{1}{x} + \\frac{1}{x^2}} = @Rational(a, b)@ $.
+    \\end{solution}
+\\end{question}
+%</cau4>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 5: Khai triển chuỗi Maclaurin (Symbolic)}
+%<cau5>%
+%%variables%%
+%a: [2, 5, 1]
+%%variables%%
+\\begin{question}
+Khai triển Maclaurin của hàm số $ f(x) = e^{@a@ x} $ đến bậc 2 có phần dư Peano là:
+\\DatCot[2]
+\\Dung{$ 1 + @a@ x + @Rational(a**2, 2)@ x^2 + o(x^2) $}
+\\Sai{$ 1 + @a@ x + @a**2@ x^2 + o(x^2) $}
+\\Sai{$ 1 - @a@ x + @Rational(a**2, 2)@ x^2 + o(x^2) $}
+\\Sai{$ 1 + @a@ x + \\frac{@a@}{2} x^2 + o(x^2) $}
+    \\begin{solution}
+Ta có chuỗi cơ bản: $ e^u = 1 + u + \\frac{u^2}{2} + o(u^2) $. \\\\
+Thay $ u = @a@x $, ta được: \\\\
+$ f(x) = 1 + (@a@x) + \\frac{(@a@x)^2}{2} + o(x^2) = 1 + @a@ x + @Rational(a**2, 2)@ x^2 + o(x^2) $.
+    \\end{solution}
+\\end{question}
+%</cau5>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 6: Đa thức Maclaurin (Symbolic)}
+%<cau6>%
+%%variables%%
+%a: [2, 4, 1]
+%%variables%%
+\\begin{question}
+Đa thức Maclaurin bậc 3 của hàm số $ f(x) = \\sin(@a@ x) $ là:
+\\DatCot[2]
+\\Dung{$ P_3(x) = @a@ x - @Rational(a**3, 6)@ x^3 $}
+\\Sai{$ P_3(x) = @a@ x + @Rational(a**3, 6)@ x^3 $}
+\\Sai{$ P_3(x) = x - @Rational(a**3, 6)@ x^3 $}
+\\Sai{$ P_3(x) = @a@ x - @a**3@ x^3 $}
+    \\begin{solution}
+Khai triển cơ bản: $ \\sin(u) = u - \\frac{u^3}{3!} + o(u^4) = u - \\frac{u^3}{6} + o(u^4) $. \\\\
+Thay $ u = @a@x $, đa thức bậc 3 là: \\\\
+$ P_3(x) = (@a@x) - \\frac{(@a@x)^3}{6} = @a@ x - @Rational(a**3, 6)@ x^3 $.
+    \\end{solution}
+\\end{question}
+%</cau6>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 7: Đạo hàm cấp 1 tại 1 điểm}
+%<cau7>%
+%%variables%%
+%a: [2, 6, 1]
+%%variables%%
+\\begin{question}
+Cho hàm số $ f(x) = x^3 + @a@ x^2 - 5x $. Tính đạo hàm của hàm số tại điểm $ x = 1 $.
+\\DatCot[4]
+\\Dung{$ f'(1) = @diff(x**3 + a*x**2 - 5*x, x).subs(x, 1)@ $}
+\\Sai{$ f'(1) = @diff(x**3 + a*x**2 - 5*x, x).subs(x, -1)@ $}
+\\Sai{$ f'(1) = @1 + a - 5@ $}
+\\Sai{$ f'(1) = 0 $}
+    \\begin{solution}
+Tính đạo hàm tổng quát: $ f'(x) = 3x^2 + @2*a@ x - 5 $. \\\\
+Thay $ x = 1 $ vào ta có: $ f'(1) = 3(1)^2 + @2*a@(1) - 5 = @diff(x**3 + a*x**2 - 5*x, x).subs(x, 1)@ $.
+    \\end{solution}
+\\end{question}
+%</cau7>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 8: Đạo hàm cấp cao}
+%<cau8>%
+%%variables%%
+%a: [2, 5, 1]
+%%variables%%
+\\begin{question}
+Tính đạo hàm cấp 2 của hàm số $ f(x) = e^{@a@ x} $.
+\\DatCot[4]
+\\Dung{$ f''(x) = @diff(exp(a*x), x, 2)@ $}
+\\Sai{$ f''(x) = @diff(exp(a*x), x, 1)@ $}
+\\Sai{$ f''(x) = @a@ x e^{@a@ x} $}
+\\Sai{$ f''(x) = e^{@a@ x} $}
+    \\begin{solution}
+Đạo hàm cấp 1: $ f'(x) = @diff(exp(a*x), x, 1)@ $. \\\\
+Đạo hàm cấp 2: $ f''(x) = (f'(x))' = @a@ \\cdot @a@ e^{@a@ x} = @diff(exp(a*x), x, 2)@ $.
+    \\end{solution}
+\\end{question}
+%</cau8>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 9: Tích phân xác định đa thức}
+%<cau9>%
+%%variables%%
+%a: [2, 5, 1]
+%%variables%%
+\\begin{question}
+Tính tích phân xác định $ I = \\int_{0}^{1} (@a@ x^3) dx $.
+\\DatCot[4]
+\\Dung{$ I = @integrate(a*x**3, (x, 0, 1))@ $}
+\\Sai{$ I = @integrate(a*x**3, (x, 0, 2))@ $}
+\\Sai{$ I = @a@ $}
+\\Sai{$ I = 0 $}
+    \\begin{solution}
+Tìm nguyên hàm: $ \\int @a@ x^3 dx = @a@ \\frac{x^4}{4} $. \\\\
+Thay cận từ $0$ đến $1$: \\\\
+$ I = \\left. \\frac{@a@ x^4}{4} \\right|_0^1 = \\frac{@a@}{4} - 0 = @integrate(a*x**3, (x, 0, 1))@ $.
+    \\end{solution}
+\\end{question}
+%</cau9>%
+\\end{section}
+
+%%%%%%%%%%%%%%%%%%%%%%
+\\begin{section}{Dạng 10: Tích phân lượng giác}
+%<cau10>%
+%%variables%%
+%a: [2, 8, 1]
+%%variables%%
+\\begin{question}
+Tính tích phân xác định $ I = \\int_{0}^{\\frac{\\pi}{2}} @a@ \\cos(x) dx $.
+\\DatCot[4]
+\\Dung{$ I = @integrate(a*cos(x), (x, 0, pi/2))@ $}
+\\Sai{$ I = -@integrate(a*cos(x), (x, 0, pi/2))@ $}
+\\Sai{$ I = 0 $}
+\\Sai{$ I = 1 $}
+    \\begin{solution}
+Tìm nguyên hàm: $ \\int @a@ \\cos(x) dx = @a@ \\sin(x) $. \\\\
+Thay cận từ $0$ đến $\\frac{\\pi}{2}$: \\\\
+$ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) = @integrate(a*cos(x), (x, 0, pi/2))@ $.
+    \\end{solution}
+\\end{question}
+%</cau10>%
+\\end{section}
+
+\\end{document}`;
+        
+        if (templateEditor) {
+            templateEditor.setValue(sampleText);
+        }
+    }
+
+    // Chạy thử
+    function previewAdvancedTemplate() {
+        const templateText = templateEditor ? templateEditor.getValue() : '';
+        const seeds = document.getElementById('seedInput').value; // Lấy chuỗi seed
+        const btn = document.getElementById('btnPreviewTemplate');
+
+        if (!templateText.trim()) { alert("Vui lòng nhập mã Template!"); return; }
+
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tính...';
+        btn.disabled = true;
+
+        fetch('/api/custom-exam/process-template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ template: templateText, seeds: seeds }) // Gửi mảng seed lên server
+        })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = '<i class="fa-solid fa-play me-2"></i>Xem trước';
+                btn.disabled = false;
+
+                if (data.success) {
+                    window.generatedVariants = data.variants;
+                    renderVariantList(data.variants);
+                    document.getElementById('btnGenerateBulk').disabled = false;
+                } else {
+                    alert("Lỗi cấu trúc: " + data.message);
                 }
+            });
+    }
 
-                data.students.forEach((student, index) => {
-                    const studentHtml = `
-                        <div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center justify-content-between feature-card-hover">
-                            <div class="d-flex align-items-center">
-                                <span class="fw-bold text-muted me-3 w-25px">${index + 1}.</span>
-                                <img src="https://ui-avatars.com/api/?name=${student.username}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm">
-                                <div>
-                                    <h6 class="fw-bold mb-0 text-body">${student.username}</h6>
-                                    <small class="text-muted">Mã SV: 202${Math.floor(Math.random() * 90000) + 10000}</small>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                    listContainer.insertAdjacentHTML('beforeend', studentHtml);
+// Render kết quả phiên bản Fami-UI (Thuật toán bóc tách - Đóng gói Flexbox)
+    function renderVariantList(variants) {
+        const listEl = document.getElementById('variantPreviewList');
+        const badge = document.getElementById('variantCountBadge');
+        listEl.innerHTML = '';
+        badge.innerText = `${variants.length} Mã đề`;
+
+        variants.forEach((vObj) => {
+            const hasError = vObj.content.includes('[LỖI');
+            let displayHtml = vObj.content;
+
+            // 1. DỌN DẸP COMMENT %
+            displayHtml = displayHtml.replace(/(?:^|\n)[ \t]*%.*/g, '');
+
+            // 2. LẤY NỘI DUNG CHÍNH (Bỏ Preamble)
+            const docMatch = displayHtml.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+            if (docMatch) displayHtml = docMatch[1];
+
+            // 3. TIÊU ĐỀ SECTION
+            displayHtml = displayHtml.replace(/\\begin\{section\}\{([^}]+)\}/g, '<h5 class="fw-bold mt-4 mb-3" style="color: #c92a2a; border-left: 4px solid #c92a2a; padding-left: 10px;">$1</h5>');
+            displayHtml = displayHtml.replace(/\\end\{section\}/g, '');
+
+            // 4. XỬ LÝ TỪNG CÂU HỎI (Bóc tách độc lập để không lộn xộn vị trí)
+            let qCounter = 1;
+
+            displayHtml = displayHtml.replace(/\\begin\{question\}([\s\S]*?)\\end\{question\}/g, (match, qContent) => {
+                let innerContent = qContent;
+
+                // BƯỚC 4.1: Bóc tách Lời giải
+                let solutionHtml = '';
+                innerContent = innerContent.replace(/\\begin\{solution\}([\s\S]*?)\\end\{solution\}/, (m, sol) => {
+                    solutionHtml = `<div class="mt-3 pt-3 w-100 border-top" style="border-top-style: dashed !important; clear: both;">
+                                        <strong style="color: #c92a2a;"><i class="fa-solid fa-play me-2"></i>Lời giải:</strong>
+                                        <div style="margin-top: 5px; white-space: normal;">${sol.trim()}</div>
+                                    </div>`;
+                    return ''; // Rút lời giải ra khỏi văn bản chung
                 });
 
-            } else {
-                alert("Lỗi: " + data.message);
-                modal.hide();
-            }
-        })
-        .catch(err => {
-            alert("Lỗi kết nối máy chủ!");
-            modal.hide();
+                // BƯỚC 4.2: Bóc tách số cột (\DatCot)
+                let columns = 1;
+                let colMatch = innerContent.match(/\\DatCot\[(\d+)\]/);
+                if (colMatch) {
+                    columns = parseInt(colMatch[1]);
+                    innerContent = innerContent.replace(colMatch[0], '');
+                }
+
+                // BƯỚC 4.3: Bóc tách các Đáp án (Dung/Sai) bằng Regex đa tầng
+                let options = [];
+                const optRegex = /\\(Dung|Sai)\{((?:[^{}]|\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})*)\}/g;
+                innerContent = innerContent.replace(optRegex, (m, type, text) => {
+                    options.push({ type: type, text: text.trim() });
+                    return ''; // Rút đáp án ra khỏi văn bản chung
+                });
+
+                // BƯỚC 4.4: Phần còn lại ĐÚNG LÀ ĐỀ BÀI (Không bị đáp án trôi lên đè vào)
+                let promptHtml = `<div class="mb-3" style="text-align: justify; white-space: normal; width: 100%; display: block;">
+                                    <strong style="color: #c92a2a;">Câu ${qCounter}.</strong> ${innerContent.trim()}
+                                  </div>`;
+                qCounter++;
+
+                // BƯỚC 4.5: Lắp ráp Lưới Đáp án bằng Flexbox (Chống lệch, chống rớt dòng)
+                let optionsHtml = `<div style="display: flex; flex-wrap: wrap; width: 100%; margin-bottom: 10px; box-sizing: border-box;">`;
+                let widthPercent = columns > 1 ? (100 / columns) : 100;
+                
+                options.forEach((opt, idx) => {
+                    let label = String.fromCharCode(65 + idx);
+                    let style = opt.type === 'Dung'
+                        ? 'background-color: #fff0f0; border: 1px solid #c92a2a; color: #c92a2a;'
+                        : 'background-color: #f8f9fa; border: 1px solid #dee2e6; color: #212529;';
+                    
+                    // Tính toán chiều rộng bằng hàm CSS calc() để trừ hao khoảng cách, đảm bảo đều 100%
+                    optionsHtml += `
+                        <div style="width: calc(${widthPercent}% - 12px); margin-right: 12px; margin-bottom: 12px; box-sizing: border-box;">
+                            <div style="${style} padding: 8px 15px; border-radius: 6px; text-align: left; display: flex; align-items: flex-start; height: 100%;">
+                                <strong style="margin-right: 8px; flex-shrink: 0;">${label}.</strong>
+                                <span style="white-space: normal; overflow-wrap: break-word; width: 100%;">${opt.text}</span>
+                            </div>
+                        </div>`;
+                });
+                optionsHtml += `</div>`;
+
+                // BƯỚC 4.6: Xếp tất cả vào thẻ Card theo thứ tự hoàn hảo (Đề -> Đáp án -> Lời giải)
+                return `<div class="card mb-4 border-secondary-subtle shadow-sm">
+                            <div class="card-body p-4" style="white-space: normal;">
+                                ${promptHtml}
+                                ${optionsHtml}
+                                ${solutionHtml}
+                            </div>
+                        </div>`;
+            });
+
+            // Gắn vào DOM HTML
+            const li = document.createElement('li');
+            li.className = "list-group-item p-0 border-0 bg-transparent mb-4";
+            li.innerHTML = `
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge ${hasError ? 'bg-danger' : 'bg-primary'} fs-6 rounded-pill px-3 py-2 shadow-sm">Mã đề: ${vObj.seed}</span>
+            </div>
+            <div class="p-4 rounded-4 shadow-sm bg-white border ${hasError ? 'border-danger border-2' : 'border-0'}" style="white-space: normal;">
+                ${displayHtml}
+            </div>
+            `;
+            listEl.appendChild(li);
         });
+
+        if (window.MathJax) { MathJax.typesetPromise(); }
+    }
+    // Gộp đề 
+    function generateBulkExam() {
+        const title = document.getElementById('customExamTitle').value || "Đề thi Tùy chỉnh";
+        const btn = document.getElementById('btnGenerateBulk');
+        const alertBox = document.getElementById('bulkSuccessAlert');
+        const btnTex = document.getElementById('btnExportTex');
+        const btnPdf = document.getElementById('btnExportPdf');
+
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang đóng gói...';
+        btn.disabled = true;
+
+        fetch('/api/custom-exam/generate-bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ exam_title: title, variants: window.generatedVariants })
+        })
+            .then(res => res.json())
+            .then(data => {
+                btn.innerHTML = '<i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất';
+                btn.disabled = false;
+                if (data.success) {
+                    alertBox.classList.remove('d-none');
+                    btnTex.classList.remove('disabled');
+                    btnPdf.classList.remove('disabled');
+                } else { alert(data.message); }
+            });
     }
 
-    // ==============================================================
-    // JS TRÌNH SINH ĐỀ THI VÀ BÀN PHÍM ẢO 
-    // ==============================================================
-    function toggleCustomInputs() {
-        const type = document.getElementById('expressionType').value;
-        const coeffArea = document.getElementById('coefficientArea');
-        const customArea = document.getElementById('customExprArea');
-        if (type === 'custom') {
-            coeffArea.classList.add('d-none');
-            customArea.classList.remove('d-none');
-        } else {
-            coeffArea.classList.remove('d-none');
-            customArea.classList.add('d-none');
-        }
-    }
-
-    function toggleCoeffInputs() {
-        const isRandom = document.getElementById('randomCoeff').checked;
-        const manualInputs = document.getElementById('manualCoeffs');
-        document.getElementById('isRandomHidden').value = isRandom ? "true" : "false";
-        if (isRandom) {
-            manualInputs.classList.add('d-none');
-        } else {
-            manualInputs.classList.remove('d-none');
-        }
-    }
-
-    function toggleRandomQuantityInputs() {
-        const difficulty = document.getElementById('randomDifficulty').value;
-        const singleArea = document.getElementById('singleQuantityArea');
-        const mixedArea = document.getElementById('mixedQuantityArea');
-        if (difficulty === 'mixed') {
-            singleArea.classList.add('d-none');
-            mixedArea.classList.remove('d-none');
-        } else {
-            singleArea.classList.remove('d-none');
-            mixedArea.classList.add('d-none');
-        }
-    }
-
-    /* BÀN PHÍM ẢO */
-    function insertMath(text) {
-        const input = document.getElementById('customExprInput');
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        const val = input.value;
-        input.value = val.substring(0, start) + text + val.substring(end);
-        let newPos = start + text.length;
-        if (text.endsWith('()')) { newPos -= 1; }
-        input.setSelectionRange(newPos, newPos);
-        input.focus();
-    }
-
-    function backspaceMath() {
-        const input = document.getElementById('customExprInput');
-        const start = input.selectionStart;
-        const end = input.selectionEnd;
-        if (start === end && start > 0) {
-            const val = input.value;
-            input.value = val.substring(0, start - 1) + val.substring(end);
-            input.setSelectionRange(start - 1, start - 1);
-        } else if (start !== end) {
-            const val = input.value;
-            input.value = val.substring(0, start) + val.substring(end);
-            input.setSelectionRange(start, start);
-        }
-        input.focus();
-    }
-
-    function clearMath() {
-        const input = document.getElementById('customExprInput');
-        input.value = '';
-        input.focus();
-    }
-
-    /* GỌI API SINH ĐỀ */
+    // Sinh đề Ngẫu nhiên 
     function generateExamAjax() {
         const form = document.getElementById('randomExamForm');
         const formData = new FormData(form);
@@ -612,122 +959,36 @@
         const alertBox = document.getElementById('successAlert');
         const btnTex = document.getElementById('btnExportTex');
         const btnPdf = document.getElementById('btnExportPdf');
-        
+
         const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang xử lý Toán học...';
         btn.disabled = true;
-        alertBox.classList.add('d-none');
-        btnTex.classList.add('disabled');
-        btnPdf.classList.add('disabled');
+        alertBox.classList.add('d-none'); btnTex.classList.add('disabled'); btnPdf.classList.add('disabled');
 
         fetch('/api/generate-exam', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            if (data.success) {
-                alertBox.classList.remove('d-none');
-                btnTex.classList.remove('disabled');
-                btnPdf.classList.remove('disabled');
-            } else { alert("Có lỗi xảy ra: " + data.message); }
-        }).catch(error => {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            alert("Lỗi kết nối máy chủ!");
-        });
+            .then(response => response.json())
+            .then(data => {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                if (data.success) {
+                    alertBox.classList.remove('d-none');
+                    btnTex.classList.remove('disabled');
+                    btnPdf.classList.remove('disabled');
+                } else { alert("Có lỗi xảy ra: " + data.message); }
+            }).catch(error => {
+                btn.innerHTML = originalText; btn.disabled = false; alert("Lỗi kết nối máy chủ!");
+            });
     }
 
-    function addCustomQuestion() {
-        const form = document.getElementById('addCustomQuestionForm');
-        const formData = new FormData(form);
-        const btn = document.getElementById('btnAddCustom');
-        
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tính...';
-        btn.disabled = true;
-
-        fetch('/api/custom-exam/add', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => {
-            btn.innerHTML = '<i class="fa-solid fa-plus me-2"></i>Thêm Câu Này Vào Đề';
-            btn.disabled = false;
-            if (data.success) { renderCustomList(data.questions); } 
-            else { alert(data.message); }
-        });
-    }
-
-    function removeCustomQuestion(index) {
-        const formData = new FormData();
-        formData.append('index', index);
-        fetch('/api/custom-exam/remove', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => { if (data.success) renderCustomList(data.questions); });
-    }
-
-    function renderCustomList(questions) {
-        const listEl = document.getElementById('customQuestionsList');
-        const countBadge = document.getElementById('customCountBadge');
-        const btnGenerate = document.getElementById('btnGenerateCustom');
-        
-        listEl.innerHTML = '';
-        countBadge.innerText = `Tổng: ${questions.length} câu`;
-        
-        if (questions.length === 0) {
-            listEl.innerHTML = `<li class="list-group-item p-4 bg-body-tertiary text-center text-muted border-0" id="emptyListMsg">
-                                <i class="fa-solid fa-folder-open fs-2 mb-2 opacity-50 d-block"></i>
-                                <em>Chưa có câu hỏi nào. Hãy sử dụng công cụ bên trên để thêm câu hỏi nhé!</em>
-                            </li>`;
-            btnGenerate.disabled = true;
-            return;
+    function toggleRandomQuantityInputs() {
+        const difficulty = document.getElementById('randomDifficulty').value;
+        const singleArea = document.getElementById('singleQuantityArea');
+        const mixedArea = document.getElementById('mixedQuantityArea');
+        if (difficulty === 'mixed') {
+            singleArea.classList.add('d-none'); mixedArea.classList.remove('d-none');
+        } else {
+            singleArea.classList.remove('d-none'); mixedArea.classList.add('d-none');
         }
-
-        btnGenerate.disabled = false;
-        questions.forEach((q, index) => {
-            const li = document.createElement('li');
-            li.className = "list-group-item d-flex justify-content-between align-items-center p-3 border-secondary-subtle";
-            li.innerHTML = `
-                <div>
-                    <span class="fw-bold me-2 text-primary">Câu ${index + 1}:</span> 
-                    \\( ${q.q_tex} \\) 
-                    <br><small class="text-success ms-5"><i class="fa-solid fa-check me-1"></i>Đáp án: ${q.ans_str}</small>
-                </div>
-                <div>
-                    <button type="button" onclick="removeCustomQuestion(${index})" class="btn btn-sm btn-outline-danger"><i class="fa-solid fa-trash"></i></button>
-                </div>
-            `;
-            listEl.appendChild(li);
-        });
-        if (window.MathJax) { MathJax.typesetPromise(); }
-    }
-
-    function generateCustomExam() {
-        const title = document.getElementById('customExamTitle').value || "Đề thi Tùy chỉnh Giải tích I";
-        const formData = new FormData();
-        formData.append('exam_title', title);
-
-        const btn = document.getElementById('btnGenerateCustom');
-        const alertBox = document.getElementById('customSuccessAlert');
-        const btnTex = document.getElementById('btnExportTex');
-        const btnPdf = document.getElementById('btnExportPdf');
-        
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang đóng gói...';
-        btn.disabled = true; alertBox.classList.add('d-none'); btnTex.classList.add('disabled'); btnPdf.classList.add('disabled');
-
-        fetch('/api/custom-exam/generate', { method: 'POST', body: formData })
-        .then(response => response.json())
-        .then(data => {
-            btn.innerHTML = '<i class="fa-solid fa-layer-group me-2"></i>Gộp Đề & Sẵn Sàng Xuất File'; 
-            btn.disabled = false;
-            if (data.success) {
-                alertBox.classList.remove('d-none'); 
-                btnTex.classList.remove('disabled'); 
-                btnPdf.classList.remove('disabled');
-                renderCustomList([]);
-            } else { alert(data.message); }
-        }).catch(error => {
-            btn.innerHTML = '<i class="fa-solid fa-layer-group me-2"></i>Gộp Đề & Sẵn Sàng Xuất File';
-            btn.disabled = false;
-            alert("Lỗi kết nối máy chủ khi đóng gói!");
-        });
     }
 </script>
 {% endblock %}
