@@ -475,15 +475,47 @@
     window.generatedVariants = [];
     let templateEditor;
 
-    document.addEventListener("DOMContentLoaded", function () {
-        // Kích hoạt CodeMirror có đánh số dòng và giao diện tối (Dracula)
+document.addEventListener("DOMContentLoaded", function () {
+        // 1. Kích hoạt CodeMirror (Giữ nguyên phần khởi tạo cũ)
         templateEditor = CodeMirror.fromTextArea(document.getElementById("templateInput"), {
-            lineNumbers: true, // Hiển thị số dòng 1, 2, 3...
+            lineNumbers: true,
             theme: "dracula",
             mode: "text/plain",
             lineWrapping: true
         });
-        templateEditor.setSize("100%", "100%"); // Phóng hết cỡ container
+        templateEditor.setSize("100%", "100%");
+
+        // 2. THÊM ĐOẠN NÀY: Thiết lập nội dung mặc định ngay khi load trang
+        const defaultTemplate = `\\documentclass{fami-exam}
+
+%% Gói do người dùng tự sử dụng
+\\usepackage{amsmath, amsxtra, latexsym, amssymb, amscd,amsthm}
+\\usepackage[utf8]{vietnam}
+
+\\MaDeThi{101}
+\\HocKy{2026.1}
+\\HocPhan{Giải tích I}
+\\MaHocPhan{MI1111}
+\\GhiChu{Sinh viên không được sử dụng tài liệu}
+\\GhiChuDapAn{Thang điểm: 10. Mỗi câu 1 điểm}
+
+\\NgonNgu{ vietnamese }
+\\LoiGiai{ true }
+
+\\begin{document}
+%% Nhập nội dung chính
+\\end{document}`;
+        
+        // Đưa nội dung vào editor
+        templateEditor.setValue(defaultTemplate);
+
+        // 3. Các đoạn xử lý expandWorkspaceLayout/resetWorkspaceLayout bên dưới giữ nguyên...
+        setTimeout(() => {
+            if (document.getElementById('nav-exam-tab').classList.contains('active') && 
+                document.getElementById('custom-tab').classList.contains('active')) {
+                expandWorkspaceLayout();
+            }
+        }, 100);
     });
     
 // --- LÔGIC MỚI: TỰ ĐỘNG PHÓNG TO KHI VÀO TAB SINH TÙY CHỈNH ---

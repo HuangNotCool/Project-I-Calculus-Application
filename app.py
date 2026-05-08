@@ -93,15 +93,14 @@ def parse_advanced_template(template_text):
             def eval_math(math_match):
                 expr = math_match.group(1).strip()
                 
-                # --- SỬA LỖI Ở ĐÂY: Nếu chỉ là tên biến đơn giản (VD: @menhde@), trả về giá trị thô luôn
                 if expr in chosen_vars:
                     return str(chosen_vars[expr])
                 
-                # Nếu là biểu thức phức tạp (VD: @a + b@) thì mới bắt đầu xử lý tiếp
                 expr = expr.replace('^', '**')
-                
                 words = re.findall(r'\b[a-zA-Z_]\w*\b', expr)
-                math_funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan', 'exp', 'log', 'ln', 'simplify', 'diff', 'integrate', 'limit', 'lim', 'root', 'sqrt', 'oo', 'inf', 'Sum', 'Rational', 'Symbol', 'Eq', 'And', 'Piecewise', 'doit', 'removeO', 'series', 'subs', 'Subs', 'Derivative', 'pi', 'x', 'y', 'z', 'k', 'n', 'p']
+                
+                # Đã bổ sung 'AutoMath' vào danh sách hàm hợp lệ
+                math_funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan', 'exp', 'log', 'ln', 'simplify', 'diff', 'integrate', 'limit', 'lim', 'root', 'sqrt', 'oo', 'inf', 'Sum', 'Rational', 'Symbol', 'Eq', 'And', 'Piecewise', 'doit', 'removeO', 'series', 'subs', 'Subs', 'Derivative', 'pi', 'x', 'y', 'z', 'k', 'n', 'p', 'AutoMath']
                 
                 for word in words:
                     if word not in chosen_vars and word not in math_funcs:
@@ -112,7 +111,37 @@ def parse_advanced_template(template_text):
                     val = str(chosen_vars[var_name])
                     expr = re.sub(rf'\b{var_name}\b', val, expr)
                 
+                # 1. HÀM AI SINH NHIỄU SỐ HỌC (AutoMath)
+                def custom_automath(val):
+                    pool = [sp.Integer(0), sp.Integer(1), sp.Integer(-1), sp.oo, -sp.oo]
+                    if hasattr(val, 'is_number') and val.is_number and not val.has(sp.oo):
+                        try:
+                            pool.extend([val + 1, val - 1, -val])
+                            if val != 0: pool.append(1/val)
+                            if val != 0: pool.append(val * 2)
+                        except: pass
+                    
+                    correct_tex = sp.latex(val)
+                    pool_latex = list(set([sp.latex(p) for p in pool]))
+                    if correct_tex in pool_latex:
+                        pool_latex.remove(correct_tex)
+                        
+                    distractors = random.sample(pool_latex, min(3, len(pool_latex)))
+                    while len(distractors) < 3:
+                        distractors.append("\\text{Khác}")
+                        
+                    # Trộn ngẫu nhiên A, B, C, D
+                    options_html = [
+                        f"\\Dung{{$ {correct_tex} $}}",
+                        f"\\Sai{{$ {distractors[0]} $}}",
+                        f"\\Sai{{$ {distractors[1]} $}}",
+                        f"\\Sai{{$ {distractors[2]} $}}"
+                    ]
+                    random.shuffle(options_html)
+                    return "\n".join(options_html)
+
                 try:
+                    # Bổ sung AutoMath vào môi trường tính toán
                     safe_dict = {
                         'sp': sp, 'sin': sp.sin, 'cos': sp.cos, 'tan': sp.tan, 
                         'asin': sp.asin, 'acos': sp.acos, 'atan': sp.atan,
@@ -123,10 +152,15 @@ def parse_advanced_template(template_text):
                         'Rational': sp.Rational, 'Sum': sp.Sum, 'Symbol': sp.Symbol,
                         'Eq': sp.Eq, 'And': sp.And, 'Piecewise': sp.Piecewise,
                         'Subs': sp.Subs, 'Derivative': sp.Derivative, 'x': sp.Symbol('x'), 
-                        'k': sp.Symbol('k'), 'n': sp.Symbol('n'), 'p': sp.Symbol('p'), 'pi': sp.pi
+                        'k': sp.Symbol('k'), 'n': sp.Symbol('n'), 'p': sp.Symbol('p'), 'pi': sp.pi,
+                        'AutoMath': custom_automath
                     }
                     result = eval(expr, {"__builtins__": {'abs': abs, 'int': int, 'float': float}}, safe_dict)
                     
+                    # Chặn lỗi hiển thị khi trả về chuỗi của AutoMath
+                    if isinstance(result, str) and ('\\Dung' in result or '\\Sai' in result):
+                        return result
+                        
                     if hasattr(result, 'doit') and not isinstance(result, type):
                         result = result.doit()
                     
@@ -139,8 +173,35 @@ def parse_advanced_template(template_text):
                 except Exception as e:
                     return f"\\text{{[LỖI Toán học tại {block_name}: {str(e)}]}}"
 
-            # Trả về nội dung khối đã được xử lý
-            return re.sub(r'@(.*?)@', eval_math, clean_content)
+            # 2. Xử lý các thẻ Toán học @...@ trước
+            content_after_math = re.sub(r'@(.*?)@', eval_math, clean_content)
+
+            # 3. HÀM AI SINH NHIỄU MỆNH ĐỀ LOGIC (AutoText)
+            def process_autotext(text_match):
+                correct = text_match.group(1).strip()
+                wrongs = [w.strip() for w in text_match.group(2).split(';') if w.strip()]
+                
+                distractors = random.sample(wrongs, min(3, len(wrongs)))
+                while len(distractors) < 3:
+                    distractors.append("Sai")
+                    
+                # Trộn ngẫu nhiên A, B, C, D
+                options_html = [
+                    f"\\Dung{{{correct}}}",
+                    f"\\Sai{{{distractors[0]}}}",
+                    f"\\Sai{{{distractors[1]}}}",
+                    f"\\Sai{{{distractors[2]}}}"
+                ]
+                random.shuffle(options_html)
+                return "\n".join(options_html)
+
+            # Regex SIÊU CẤP hỗ trợ xuống dòng, khoảng trắng, ngoặc lồng nhau
+            autotext_regex = re.compile(r'\\AutoText\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}\s*\{((?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*)\}', re.IGNORECASE | re.DOTALL)
+            
+            # Quét và áp dụng AutoText
+            final_block = autotext_regex.sub(process_autotext, content_after_math)
+
+            return final_block
 
         # QUAN TRỌNG: Quét toàn bộ template gốc, tìm các khối %<tên>% ... %</tên>% và gọi hàm xử lý
         final_document = re.sub(r'%<([^>]+)>%(.*?)%</\1>%', process_block, template_text, flags=re.DOTALL)
@@ -482,12 +543,6 @@ def download_pdf():
             print("Lỗi hệ thống khi gọi MiKTeX:", str(e))
             flash('Không thể gọi lệnh pdflatex. Hãy chắc chắn bạn đã cài MiKTeX và thêm vào biến môi trường PATH.', 'danger')
             return redirect(url_for('teacher_dashboard'))
-
-    if pdf_memory:
-        return send_file(pdf_memory, as_attachment=True, download_name='De_Thi_Giai_Tich.pdf', mimetype='application/pdf')
-    else:
-        flash('Lỗi đọc file PDF.', 'danger')
-        return redirect(url_for('teacher_dashboard'))
 
     if pdf_memory:
         return send_file(pdf_memory, as_attachment=True, download_name='De_Thi_Giai_Tich.pdf', mimetype='application/pdf')
