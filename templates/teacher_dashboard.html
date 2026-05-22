@@ -853,6 +853,7 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         const listEl = document.getElementById('variantPreviewList');
         const badge = document.getElementById('variantCountBadge');
         listEl.innerHTML = '';
+        window.generatedQuestionReviews = {};
         badge.innerText = `${variants.length} Mã đề`;
 
         variants.forEach((vObj) => {
@@ -903,6 +904,14 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 });
 
                 // BƯỚC 4.4: Phần còn lại ĐÚNG LÀ ĐỀ BÀI (Không bị đáp án trôi lên đè vào)
+                const questionNumber = qCounter;
+                const reviewId = `review-${String(vObj.seed).replace(/[^a-zA-Z0-9_-]/g, '_')}-${questionNumber}`;
+                window.generatedQuestionReviews[reviewId] = {
+                    seed: vObj.seed,
+                    question_index: questionNumber,
+                    content: match
+                };
+
                 let promptHtml = `<div class="mb-3" style="text-align: justify; white-space: normal; width: 100%; display: block;">
                                     <strong style="color: #c92a2a;">Câu ${qCounter}.</strong> ${innerContent.trim()}
                                   </div>`;
@@ -932,9 +941,15 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 // BƯỚC 4.6: Xếp tất cả vào thẻ Card theo thứ tự hoàn hảo (Đề -> Đáp án -> Lời giải)
                 return `<div class="card mb-4 border-secondary-subtle shadow-sm">
                             <div class="card-body p-4" style="white-space: normal;">
+                                <div class="d-flex justify-content-end mb-3">
+                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill fw-bold" id="${reviewId}-btn" onclick="checkQuestionAI('${reviewId}')">
+                                        <i class="fa-solid fa-shield-halved me-1"></i>Kiểm tra thông minh
+                                    </button>
+                                </div>
                                 ${promptHtml}
                                 ${optionsHtml}
                                 ${solutionHtml}
+                                <div class="mt-3 d-none" id="${reviewId}-result"></div>
                             </div>
                         </div>`;
             });
@@ -954,6 +969,80 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         });
 
         if (window.MathJax) { MathJax.typesetPromise(); }
+    }
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function renderQuestionReview(resultEl, data) {
+        const statusClass = data.status === 'ok' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
+        const iconClass = data.status === 'ok' ? 'fa-circle-check' : (data.status === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-xmark');
+        let issuesHtml = '';
+
+        if (data.issues && data.issues.length) {
+            issuesHtml = data.issues.map((issue) => {
+                const severityClass = issue.severity === 'high' ? 'danger' : (issue.severity === 'medium' ? 'warning' : 'secondary');
+                return `
+                    <div class="border-top pt-2 mt-2">
+                        <span class="badge bg-${severityClass} me-2">${escapeHtml(issue.severity)}</span>
+                        <span class="badge bg-light text-dark border me-2">${escapeHtml(issue.type)}</span>
+                        <div class="fw-bold mt-2">${escapeHtml(issue.message)}</div>
+                        <div class="small text-muted">${escapeHtml(issue.suggestion)}</div>
+                    </div>`;
+            }).join('');
+        }
+
+        resultEl.className = `mt-3 alert alert-${statusClass} border-0 shadow-sm small`;
+        resultEl.innerHTML = `
+            <div class="fw-bold mb-1">
+                <i class="fa-solid ${iconClass} me-2"></i>${escapeHtml(data.summary)}
+            </div>
+            <div class="text-muted">Kiểm tra thành công.</div>
+            ${issuesHtml}
+        `;
+    }
+
+    function checkQuestionAI(reviewId) {
+        const payload = window.generatedQuestionReviews ? window.generatedQuestionReviews[reviewId] : null;
+        const resultEl = document.getElementById(`${reviewId}-result`);
+        const btn = document.getElementById(`${reviewId}-btn`);
+
+        if (!payload || !resultEl || !btn) return;
+
+        resultEl.className = 'mt-3 alert alert-info border-0 shadow-sm small';
+        resultEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra câu hỏi...';
+        btn.disabled = true;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Đang kiểm tra';
+
+        fetch('/api/custom-exam/check-question-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    renderQuestionReview(resultEl, data);
+                } else {
+                    resultEl.className = 'mt-3 alert alert-danger border-0 shadow-sm small';
+                    resultEl.innerHTML = `<i class="fa-solid fa-circle-xmark me-2"></i>${escapeHtml(data.message || 'Không kiểm tra được câu hỏi.')}`;
+                }
+            })
+            .catch(() => {
+                resultEl.className = 'mt-3 alert alert-danger border-0 shadow-sm small';
+                resultEl.innerHTML = '<i class="fa-solid fa-circle-xmark me-2"></i>Lỗi kết nối khi kiểm tra câu hỏi.';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
     }
     // Gộp đề 
     function generateBulkExam() {

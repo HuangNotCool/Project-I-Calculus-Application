@@ -32,6 +32,35 @@ def parse_advanced_template(template_text):
         except ValueError:
             seed_int = 1
 
+        def normalize_latex_signs(text):
+            # Clean sign pairs created by replacing variables with negative values.
+            atom = r'(\\frac\{[^{}]+\}\{[^{}]+\}|\\infty|\d+(?:\.\d+)?)'
+            rules = [
+                (rf'-\s*-\s*{atom}', r'+ \1'),
+                (rf'\+\s*-\s*{atom}', r'- \1'),
+                (rf'-\s*\+\s*{atom}', r'- \1'),
+                (rf'\+\s*\+\s*{atom}', r'+ \1'),
+            ]
+            for pattern, replacement in rules:
+                text = re.sub(pattern, replacement, text)
+
+            # Clean coefficient 1 created by templates like @a@x when a = 1.
+            coefficient_targets = (
+                r'(?:[xyztknp]\b|\|[xyztknp]\||'
+                r'\\(?:pi|sin|cos|tan|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|sqrt)\b)'
+            )
+            text = re.sub(rf'(?<![\d.])-1(?={coefficient_targets})', '-', text)
+            text = re.sub(rf'(?<![\d.])1(?={coefficient_targets})', '', text)
+
+            # Clean exponent 1 created by templates like x^@m@ when m = 1.
+            text = re.sub(r'(\|[xyztknp]\|)\^\{1\}', r'\1', text)
+            text = re.sub(r'(\|[xyztknp]\|)\^1', r'\1', text)
+            text = re.sub(r'(?<![A-Za-z\\])([xyztknp])\^\{1\}', r'\1', text)
+            text = re.sub(r'(?<![A-Za-z\\])([xyztknp])\^1', r'\1', text)
+            text = re.sub(r'(\\right[\)\]\}]|[\)\]\}])\^\{1\}', r'\1', text)
+            text = re.sub(r'(\\right[\)\]\}]|[\)\]\}])\^1(?!\d)', r'\1', text)
+            return text
+
         # Hàm xử lý cục bộ cho TỪNG khối câu hỏi (VD: %<cau1>% ... %</cau1>%)
         def process_block(match):
             block_name = match.group(1) # Tên khối (VD: cau1)
@@ -200,14 +229,273 @@ def parse_advanced_template(template_text):
             
             # Quét và áp dụng AutoText
             final_block = autotext_regex.sub(process_autotext, content_after_math)
+            final_block = normalize_latex_signs(final_block)
 
             return final_block
 
         # QUAN TRỌNG: Quét toàn bộ template gốc, tìm các khối %<tên>% ... %</tên>% và gọi hàm xử lý
         final_document = re.sub(r'%<([^>]+)>%(.*?)%</\1>%', process_block, template_text, flags=re.DOTALL)
+        final_document = normalize_latex_signs(final_document)
         return final_document
 
     return generate_instance
+
+def review_question_content(question_content):
+    issues = []
+
+    def add_issue(kind, severity, message, suggestion):
+        issues.append({
+            'type': kind,
+            'severity': severity,
+            'message': message,
+            'suggestion': suggestion
+        })
+
+    def extract_choices(text):
+        choices = []
+        command_pattern = re.compile(r'\\(Dung|Sai)\s*\{')
+        for match in command_pattern.finditer(text):
+            command = match.group(1)
+            start = match.end()
+            depth = 1
+            idx = start
+            while idx < len(text) and depth > 0:
+                char = text[idx]
+                prev = text[idx - 1] if idx > 0 else ''
+                if char == '{' and prev != '\\':
+                    depth += 1
+                elif char == '}' and prev != '\\':
+                    depth -= 1
+                idx += 1
+
+            if depth == 0:
+                choices.append({
+                    'type': command,
+                    'body': text[start:idx - 1].strip()
+                })
+        return choices
+
+    def normalize_choice_text(text):
+        text = re.sub(r'(?<!\\)\$', '', text)
+        text = text.replace('\\left', '').replace('\\right', '')
+        text = re.sub(r'\\,|\\;|\\!|\\quad|\\qquad', '', text)
+        text = re.sub(r'\s+', '', text)
+        text = text.rstrip('.。')
+        return text
+
+    def contains_any(text, patterns):
+        return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+    choices = extract_choices(question_content)
+    correct_choices = [choice for choice in choices if choice['type'] == 'Dung']
+    wrong_choices = [choice for choice in choices if choice['type'] == 'Sai']
+    correct_body = correct_choices[0]['body'] if len(correct_choices) == 1 else ''
+    question_lower = question_content.lower()
+
+    if '[LỖI' in question_content:
+        add_issue(
+            'math',
+            'high',
+            'Câu hỏi còn chứa thông báo lỗi sinh biểu thức.',
+            'Tìm đoạn bắt đầu bằng [LỖI...] trong preview và sửa biến hoặc biểu thức @...@ tương ứng.'
+        )
+
+    leftover_vars = re.findall(r'@[^@\n]{1,120}@', question_content)
+    if leftover_vars:
+        add_issue(
+            'template',
+            'high',
+            'Câu hỏi còn biến template chưa được xử lý.',
+            'Kiểm tra khai báo trong %%variables%% hoặc chính tả biến: ' + ', '.join(sorted(set(leftover_vars))[:5])
+        )
+
+    if '\\AutoText' in question_content:
+        add_issue(
+            'template',
+            'medium',
+            'Lệnh \\AutoText chưa được bung thành đáp án.',
+            'Kiểm tra cú pháp \\AutoText{đáp án đúng}{đáp án sai 1; đáp án sai 2; ...}.'
+        )
+
+    if '\\AutoMath' in question_content:
+        add_issue(
+            'template',
+            'medium',
+            'Lệnh AutoMath chưa được tính toán.',
+            'Đặt AutoMath trong cặp @...@, ví dụ @AutoMath(Rational(1,2))@.'
+        )
+
+    correct_count = len(correct_choices)
+    wrong_count = len(wrong_choices)
+    if correct_count == 0:
+        add_issue(
+            'answer',
+            'high',
+            'Câu hỏi chưa có đáp án đúng \\Dung{...}.',
+            'Mỗi câu trắc nghiệm nên có đúng một đáp án \\Dung{...}.'
+        )
+    elif correct_count > 1:
+        add_issue(
+            'answer',
+            'high',
+            f'Câu hỏi có {correct_count} đáp án đúng.',
+            'Chỉ giữ một đáp án đúng hoặc tách thành nhiều câu riêng.'
+        )
+
+    if wrong_count < 3:
+        add_issue(
+            'answer',
+            'medium',
+            f'Câu hỏi mới có {wrong_count} đáp án sai.',
+            'Nên có ít nhất 3 đáp án \\Sai{...} để đủ 4 lựa chọn.'
+        )
+
+    if choices:
+        seen_choices = {}
+        for idx, choice in enumerate(choices, start=1):
+            normalized = normalize_choice_text(choice['body'])
+            if not normalized:
+                continue
+            if normalized in seen_choices:
+                add_issue(
+                    'answer',
+                    'medium',
+                    f'Đáp án lựa chọn {seen_choices[normalized]} và {idx} đang trùng nhau.',
+                    'Thay một đáp án nhiễu khác để tránh hai phương án giống nhau sau khi sinh đề.'
+                )
+            else:
+                seen_choices[normalized] = idx
+
+    display_math_blocks = re.findall(r'\\\[([\s\S]*?)\\\]', question_content)
+    if any(re.search(r'(?<!\\)\$', block) for block in display_math_blocks):
+        add_issue(
+            'latex',
+            'high',
+            'Có dấu $...$ nằm bên trong công thức hiển thị \\[...\\].',
+            'Không lồng math mode. Nếu biến raw đã có $...$, hãy đặt nó trong văn bản thường thay vì \\[...\\].'
+        )
+
+    display_open = len(re.findall(r'\\\[', question_content))
+    display_close = len(re.findall(r'\\\]', question_content))
+    if display_open != display_close:
+        add_issue(
+            'latex',
+            'high',
+            'Số lượng \\[ và \\] không khớp.',
+            'Kiểm tra lại các khối công thức hiển thị trong đề hoặc lời giải.'
+        )
+
+    unescaped_dollars = re.findall(r'(?<!\\)\$', question_content)
+    if len(unescaped_dollars) % 2 != 0:
+        add_issue(
+            'latex',
+            'high',
+            'Số lượng dấu $ không chẵn.',
+            'Kiểm tra công thức inline, có thể đang thiếu một dấu $ mở hoặc đóng.'
+        )
+
+    for env_name in ['question', 'solution']:
+        begin_count = len(re.findall(rf'\\begin\s*\{{{env_name}\}}', question_content))
+        end_count = len(re.findall(rf'\\end\s*\{{{env_name}\}}', question_content))
+        if begin_count != end_count:
+            add_issue(
+                'latex',
+                'high',
+                f'Môi trường {env_name} có số begin/end không khớp.',
+                f'Kiểm tra \\begin{{{env_name}}} và \\end{{{env_name}}}.'
+            )
+
+    brace_balance = 0
+    min_balance = 0
+    prev = ''
+    for char in question_content:
+        if char == '{' and prev != '\\':
+            brace_balance += 1
+        elif char == '}' and prev != '\\':
+            brace_balance -= 1
+            min_balance = min(min_balance, brace_balance)
+        prev = char
+    if brace_balance != 0 or min_balance < 0:
+        add_issue(
+            'latex',
+            'medium',
+            'Số lượng ngoặc nhọn { } có dấu hiệu không cân bằng.',
+            'Kiểm tra các lệnh như \\frac{...}{...}, \\Dung{...}, \\Sai{...}, \\AutoText{...}{...}.'
+        )
+
+    is_domain_question = 'tập xác định' in question_lower
+    is_range_question = 'tập giá trị' in question_lower
+    looks_like_range_answer = bool(re.search(r'(?<![A-Za-z])T\s*=', correct_body))
+
+    if is_domain_question and contains_any(question_content, [r'\\arcsin', r'\\arccos']):
+        if not re.search(r'-\s*1\s*\\le[\s\S]*\\le\s*1', question_content):
+            add_issue(
+                'rubric',
+                'medium',
+                'Dạng arcsin/arccos nên nêu điều kiện -1 \\le u \\le 1.',
+                'Bổ sung điều kiện xác định của hàm arcsin/arccos trong lời giải.'
+            )
+
+        if correct_body and not re.search(r'\\left\s*\[|\[', correct_body):
+            add_issue(
+                'rubric',
+                'medium',
+                'Đáp án tập xác định của arcsin/arccos thường là đoạn đóng.',
+                'Kiểm tra lại đáp án đúng, nên dùng dạng [a,b] hoặc \\left[a,b\\right] khi giải bất đẳng thức -1 \\le u \\le 1.'
+            )
+
+    if (is_range_question or looks_like_range_answer) and '\\arctan' in question_content:
+        if correct_body and re.search(r'\\left\s*\[|\[', correct_body):
+            add_issue(
+                'rubric',
+                'high',
+                'Tập giá trị của arctan là khoảng mở, không phải đoạn đóng.',
+                'Đổi đáp án đúng sang dạng \\left(-\\frac{\\pi}{2},\\frac{\\pi}{2}\\right), có nhân hệ số nếu cần.'
+            )
+        if correct_body and '\\pi' not in correct_body:
+            add_issue(
+                'rubric',
+                'medium',
+                'Đáp án tập giá trị của arctan thường phải có \\pi.',
+                'Kiểm tra lại khoảng giá trị, vì arctan cơ bản nhận giá trị trong (-\\pi/2, \\pi/2).'
+            )
+
+    if 'hàm số ngược' in question_lower and correct_body and 'f^{-1}' not in correct_body:
+        add_issue(
+            'rubric',
+            'medium',
+            'Đáp án đúng của dạng hàm ngược chưa thấy ký hiệu f^{-1}.',
+            'Nếu câu hỏi yêu cầu tìm hàm ngược, đáp án đúng nên ghi rõ f^{-1}(x)=... để tránh mơ hồ.'
+        )
+
+    if 'hàm chẵn' in question_lower and correct_body:
+        even_markers = [r'x\^2', r'x\^4', r'\\cos\b', r'\\cosh\b']
+        odd_markers = [r'\\sin\b', r'\\sinh\b', r'\\arcsin\b', r'\\arctan\b']
+        has_even_marker = contains_any(correct_body, even_markers)
+        has_odd_marker = contains_any(correct_body, odd_markers)
+        if not has_even_marker or has_odd_marker:
+            add_issue(
+                'rubric',
+                'medium',
+                'Đáp án đúng cho câu hỏi hàm chẵn chưa khớp rõ với ngân hàng hàm chẵn.',
+                'Kiểm tra lại tập hàm chẵn: x^2, x^4, cos x, cosh x hoặc tổng các hàm chẵn.'
+            )
+
+    if not issues:
+        return {
+            'status': 'ok',
+            'summary': 'Chưa phát hiện lỗi rõ ràng trong câu hỏi này.',
+            'issues': [],
+            'mode': 'rule'
+        }
+
+    has_high = any(issue['severity'] == 'high' for issue in issues)
+    return {
+        'status': 'error' if has_high else 'warning',
+        'summary': f'Phát hiện {len(issues)} vấn đề cần xem lại.',
+        'issues': issues,
+        'mode': 'rule'
+    }
 
 with app.app_context():
     db.create_all()
@@ -781,6 +1069,25 @@ def api_process_template():
         return jsonify({'success': True, 'variants': variants})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+@app.route('/api/custom-exam/check-question-ai', methods=['POST'])
+@login_required
+def api_check_question_ai():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    data = request.get_json() or {}
+    question_content = str(data.get('content', '')).strip()
+    if not question_content:
+        return jsonify({'success': False, 'message': 'Không có nội dung câu hỏi để kiểm tra.'})
+
+    review = review_question_content(question_content)
+    return jsonify({
+        'success': True,
+        'seed': data.get('seed'),
+        'question_index': data.get('question_index'),
+        **review
+    })
 
 # API: Lưu kết quả đã sinh vào session để xuất PDF/TEX
 @app.route('/api/custom-exam/generate-bulk', methods=['POST'])
