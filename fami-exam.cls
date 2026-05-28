@@ -443,6 +443,7 @@
         \endcsname%
         % --- Show choices ---
         \ifnum\total@choices>0%
+        \par\vspace{0.35em}%
         \choice@idx=1%
         \setlength{\multicolsep}{1.5pt}
         \begin{multicols}{\CurrentNumCols}

@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
+from datetime import datetime
 
 db = SQLAlchemy()
 
@@ -43,3 +44,17 @@ class Badge(db.Model):
     description = db.Column(db.String(250), nullable=False)
     icon = db.Column(db.String(50), nullable=False)
     color = db.Column(db.String(50), default="text-warning")
+
+class ExamTemplate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    topic = db.Column(db.String(150))
+    week_number = db.Column(db.Integer)
+    description = db.Column(db.String(500))
+    status = db.Column(db.String(30), default='draft')
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    teacher = db.relationship('User', backref=db.backref('exam_templates', lazy=True))

@@ -1,5 +1,5 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file,abort
-from models import db, User, Badge, Class
+from models import db, User, Badge, Class, ExamTemplate
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sympy as sp
@@ -271,9 +271,16 @@ def review_question_content(question_content):
             if depth == 0:
                 choices.append({
                     'type': command,
-                    'body': text[start:idx - 1].strip()
+                    'body': text[start:idx - 1].strip(),
+                    'start': match.start(),
+                    'end': idx
                 })
         return choices
+
+    def remove_spans(text, spans):
+        for start, end in sorted(spans, reverse=True):
+            text = text[:start] + text[end:]
+        return text
 
     def normalize_choice_text(text):
         text = re.sub(r'(?<!\\)\$', '', text)
@@ -285,6 +292,30 @@ def review_question_content(question_content):
 
     def contains_any(text, patterns):
         return any(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+    def latex_number_to_float(text):
+        value = str(text or '').strip()
+        value = value.replace('$', '').replace('\\left', '').replace('\\right', '')
+        value = value.replace('\\,', '').replace('\\;', '').replace(' ', '')
+        value = value.rstrip('.。')
+        value = value.replace('\\dfrac', '\\frac')
+
+        if any(token in value for token in ['\\infty', '\\pi']):
+            return None
+
+        frac_match = re.fullmatch(r'([+-]?)\\frac\{([+-]?\d+)\}\{([+-]?\d+)\}', value)
+        if frac_match:
+            sign, numerator, denominator = frac_match.groups()
+            denominator = int(denominator)
+            if denominator == 0:
+                return None
+            number = int(numerator) / denominator
+            return -number if sign == '-' else number
+
+        try:
+            return float(value)
+        except ValueError:
+            return None
 
     choices = extract_choices(question_content)
     correct_choices = [choice for choice in choices if choice['type'] == 'Dung']
@@ -421,6 +452,50 @@ def review_question_content(question_content):
             'medium',
             'Số lượng ngoặc nhọn { } có dấu hiệu không cân bằng.',
             'Kiểm tra các lệnh như \\frac{...}{...}, \\Dung{...}, \\Sai{...}, \\AutoText{...}{...}.'
+        )
+
+    empty_fraction_pattern = r'\\(?:dfrac|frac)\s*\{\s*\}\s*\{[^{}]*\}|\\(?:dfrac|frac)\s*\{[^{}]*\}\s*\{\s*\}'
+    if re.search(empty_fraction_pattern, question_content):
+        add_issue(
+            'latex',
+            'high',
+            'Có phân số bị rỗng tử hoặc mẫu.',
+            'Kiểm tra các lệnh \\frac{...}{...} hoặc \\dfrac{...}{...}; không để một vế rỗng.'
+        )
+
+    interval_pattern = re.compile(
+        r'(\\left\s*)?[\[\(]\s*([^,\[\]\(\)]{1,80}?)\s*,\s*([^,\[\]\(\)]{1,80}?)\s*(\\right\s*)?[\]\)]'
+    )
+    for choice_idx, choice in enumerate(choices, start=1):
+        for interval_match in interval_pattern.finditer(choice['body']):
+            left_value = latex_number_to_float(interval_match.group(2))
+            right_value = latex_number_to_float(interval_match.group(3))
+            if left_value is None or right_value is None:
+                continue
+            if left_value > right_value:
+                add_issue(
+                    'answer',
+                    'high' if choice['type'] == 'Dung' else 'medium',
+                    f'Đáp án lựa chọn {choice_idx} có khoảng bị đảo đầu mút.',
+                    'Đổi về dạng [a,b] hoặc (a,b) với a < b; tránh dùng khoảng như [5,3] kể cả trong đáp án nhiễu.'
+                )
+
+    if re.search(r'(?<![A-Za-z])e\^\{?\s*0\s*\}?', question_content):
+        add_issue(
+            'format',
+            'medium',
+            'Có biểu thức e^0 trong câu hỏi hoặc đáp án.',
+            'Nên rút gọn thành 1 để đáp án tự nhiên hơn và tránh bị nhận xét về trình bày.'
+        )
+
+    coefficient_one_pattern = r'(?<![A-Za-z0-9\\])-?1(?=(?:[xyzt]\b|\|[xyzt]\||\\(?:sin|cos|tan|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log)\b))'
+    exponent_one_pattern = r'(?:\\right[\)\]\}]|[\)\]\}]|\|[xyzt]\||\b[xyzt])\^\{?1\}?'
+    if re.search(coefficient_one_pattern, question_content) or re.search(exponent_one_pattern, question_content):
+        add_issue(
+            'format',
+            'medium',
+            'Còn hệ số 1 hoặc số mũ 1 hiển thị trong biểu thức.',
+            'Kiểm tra seed này trong preview. Nếu còn dạng 1x, 1\\sin x hoặc x^1, nên dùng biến tránh giá trị 1 hoặc bổ sung hàm rút gọn hiển thị.'
         )
 
     is_domain_question = 'tập xác định' in question_lower
@@ -1039,6 +1114,163 @@ def student_join_class():
         return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
 
 
+def serialize_exam_template(template, include_content=False):
+    data = {
+        'id': template.id,
+        'title': template.title,
+        'topic': template.topic or '',
+        'week_number': template.week_number,
+        'description': template.description or '',
+        'status': template.status or 'draft',
+        'created_at': template.created_at.strftime('%Y-%m-%d %H:%M') if template.created_at else '',
+        'updated_at': template.updated_at.strftime('%Y-%m-%d %H:%M') if template.updated_at else '',
+        'content_preview': (template.content or '').strip()[:160]
+    }
+    if include_content:
+        data['content'] = template.content or ''
+    return data
+
+
+def get_owned_exam_template(template_id):
+    template = ExamTemplate.query.filter_by(id=template_id, teacher_id=current_user.id).first()
+    if not template:
+        return None
+    return template
+
+
+@app.route('/api/template-library', methods=['GET'])
+@login_required
+def api_template_library_list():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    templates = (
+        ExamTemplate.query
+        .filter_by(teacher_id=current_user.id)
+        .order_by(ExamTemplate.updated_at.desc(), ExamTemplate.id.desc())
+        .all()
+    )
+    return jsonify({
+        'success': True,
+        'templates': [serialize_exam_template(item) for item in templates]
+    })
+
+
+@app.route('/api/template-library/<int:template_id>', methods=['GET'])
+@login_required
+def api_template_library_detail(template_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    template = get_owned_exam_template(template_id)
+    if not template:
+        return jsonify({'success': False, 'message': 'Không tìm thấy mẫu đề hoặc bạn không có quyền mở mẫu này.'}), 404
+
+    return jsonify({
+        'success': True,
+        'template': serialize_exam_template(template, include_content=True)
+    })
+
+
+@app.route('/api/template-library', methods=['POST'])
+@login_required
+def api_template_library_save():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    data = request.get_json() or {}
+    template_id = data.get('id')
+    title = str(data.get('title') or '').strip()
+    content = str(data.get('content') or '').strip()
+    topic = str(data.get('topic') or '').strip()
+    description = str(data.get('description') or '').strip()
+    status = str(data.get('status') or 'draft').strip() or 'draft'
+
+    if status not in {'draft', 'ready', 'needs_review'}:
+        status = 'draft'
+
+    week_number = data.get('week_number')
+    try:
+        week_number = int(week_number) if str(week_number).strip() else None
+    except (TypeError, ValueError):
+        week_number = None
+
+    if not title:
+        return jsonify({'success': False, 'message': 'Vui lòng nhập tên mẫu đề.'})
+    if not content:
+        return jsonify({'success': False, 'message': 'Nội dung template đang rỗng.'})
+
+    try:
+        if template_id:
+            template = get_owned_exam_template(int(template_id))
+            if not template:
+                return jsonify({'success': False, 'message': 'Không tìm thấy mẫu đề để cập nhật.'}), 404
+        else:
+            template = ExamTemplate(teacher_id=current_user.id, title=title, content=content)
+            db.session.add(template)
+
+        template.title = title
+        template.topic = topic
+        template.week_number = week_number
+        template.description = description
+        template.status = status
+        template.content = content
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Đã lưu mẫu đề.',
+            'template': serialize_exam_template(template, include_content=True)
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Lỗi lưu mẫu đề: {str(e)}'})
+
+
+@app.route('/api/template-library/<int:template_id>/duplicate', methods=['POST'])
+@login_required
+def api_template_library_duplicate(template_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    template = get_owned_exam_template(template_id)
+    if not template:
+        return jsonify({'success': False, 'message': 'Không tìm thấy mẫu đề để nhân bản.'}), 404
+
+    duplicate = ExamTemplate(
+        teacher_id=current_user.id,
+        title=f'{template.title} - Bản sao',
+        topic=template.topic,
+        week_number=template.week_number,
+        description=template.description,
+        status='draft',
+        content=template.content
+    )
+    db.session.add(duplicate)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã nhân bản mẫu đề.',
+        'template': serialize_exam_template(duplicate, include_content=True)
+    })
+
+
+@app.route('/api/template-library/<int:template_id>', methods=['DELETE'])
+@login_required
+def api_template_library_delete(template_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    template = get_owned_exam_template(template_id)
+    if not template:
+        return jsonify({'success': False, 'message': 'Không tìm thấy mẫu đề để xóa.'}), 404
+
+    db.session.delete(template)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã xóa mẫu đề.'})
+
+
 # API: Nhận Template và trả về danh sách các biến thể đã sinh
 @app.route('/api/custom-exam/process-template', methods=['POST'])
 @login_required
@@ -1087,6 +1319,61 @@ def api_check_question_ai():
         'seed': data.get('seed'),
         'question_index': data.get('question_index'),
         **review
+    })
+
+@app.route('/api/custom-exam/check-questions-ai', methods=['POST'])
+@login_required
+def api_check_questions_ai():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    data = request.get_json() or {}
+    questions = data.get('questions', [])
+    if not isinstance(questions, list) or not questions:
+        return jsonify({'success': False, 'message': 'Không có danh sách câu hỏi để kiểm tra.'})
+
+    results = []
+    totals = {'ok': 0, 'warning': 0, 'error': 0}
+
+    for item in questions[:100]:
+        question_content = str(item.get('content', '')).strip()
+        if not question_content:
+            review = {
+                'status': 'error',
+                'summary': 'Không có nội dung câu hỏi để kiểm tra.',
+                'issues': [{
+                    'type': 'template',
+                    'severity': 'high',
+                    'message': 'Payload câu hỏi rỗng.',
+                    'suggestion': 'Render lại preview rồi thử kiểm tra lại.'
+                }],
+                'mode': 'rule'
+            }
+        else:
+            review = review_question_content(question_content)
+
+        status = review.get('status', 'warning')
+        if status not in totals:
+            status = 'warning'
+        totals[status] += 1
+
+        results.append({
+            'id': item.get('id'),
+            'seed': item.get('seed'),
+            'question_index': item.get('question_index'),
+            **review
+        })
+
+    overall_status = 'error' if totals['error'] else ('warning' if totals['warning'] else 'ok')
+    summary = f"Đã kiểm tra {len(results)} câu: {totals['ok']} ổn, {totals['warning']} cảnh báo, {totals['error']} lỗi nặng."
+
+    return jsonify({
+        'success': True,
+        'status': overall_status,
+        'summary': summary,
+        'totals': totals,
+        'results': results,
+        'mode': 'rule'
     })
 
 # API: Lưu kết quả đã sinh vào session để xuất PDF/TEX

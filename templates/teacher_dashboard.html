@@ -260,10 +260,21 @@
                                     <div class="col-xl-6 d-flex flex-column h-100">
                                         <div class="bg-body-tertiary p-4 rounded-4 border-0 shadow-sm flex-grow-1 d-flex flex-column">
                                             <div class="d-flex justify-content-between align-items-center border-bottom border-secondary-subtle pb-3 mb-3">
-                                                <h5 class="fw-bold text-primary mb-0"><i class="fa-solid fa-code me-2"></i>Soạn Thảo</h5>
-                                                <button class="btn btn-sm btn-outline-secondary fw-bold rounded-pill shadow-sm bg-body" type="button" onclick="insertSampleTemplate()">
-                                                    <i class="fa-solid fa-lightbulb text-warning me-1"></i> Chèn mẫu
-                                                </button>
+                                                <div>
+                                                    <h5 class="fw-bold text-primary mb-1"><i class="fa-solid fa-code me-2"></i>Soạn Thảo</h5>
+                                                    <span class="badge bg-light text-secondary border" id="currentTemplateBadge">Chưa lưu vào thư viện</span>
+                                                </div>
+                                                <div class="d-flex gap-2 flex-wrap justify-content-end">
+                                                    <button class="btn btn-sm btn-outline-primary fw-bold rounded-pill shadow-sm bg-body" type="button" onclick="openTemplateLibraryModal()">
+                                                        <i class="fa-solid fa-folder-open me-1"></i> Mở mẫu
+                                                    </button>
+                                                    <button class="btn btn-sm btn-primary fw-bold rounded-pill shadow-sm" type="button" onclick="openSaveTemplateModal()">
+                                                        <i class="fa-solid fa-floppy-disk me-1"></i> Lưu mẫu
+                                                    </button>
+                                                    <button class="btn btn-sm btn-outline-secondary fw-bold rounded-pill shadow-sm bg-body" type="button" onclick="insertSampleTemplate()">
+                                                        <i class="fa-solid fa-lightbulb text-warning me-1"></i> Chèn mẫu
+                                                    </button>
+                                                </div>
                                             </div>
     
                                             <form id="templateForm" class="d-flex flex-column flex-grow-1">
@@ -306,12 +317,18 @@
                                             </ul>
     
                                             <div class="border-top border-secondary-subtle pt-3 text-end mt-auto">
+                                                <div id="reviewSummaryAlert" class="alert d-none text-start mb-3 shadow-sm border-0 rounded-3 py-2 small"></div>
                                                 <div id="bulkSuccessAlert" class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3 py-2 small">
                                                     <i class="fa-solid fa-circle-check me-2"></i>Đã gộp xong. Bạn có thể lưu đề thi bên dưới!
                                                 </div>
-                                                <button type="button" id="btnGenerateBulk" onclick="generateBulkExam()" class="btn btn-success px-4 py-2 rounded-pill fw-bold shadow hover-lift w-100" disabled>
-                                                    <i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất
-                                                </button>
+                                                <div class="d-grid gap-2">
+                                                    <button type="button" id="btnCheckAllQuestions" onclick="checkAllQuestions()" class="btn btn-outline-primary px-4 py-2 rounded-pill fw-bold shadow-sm hover-lift w-100" disabled>
+                                                        <i class="fa-solid fa-shield-halved me-2"></i>Kiểm tra toàn bộ đề
+                                                    </button>
+                                                    <button type="button" id="btnGenerateBulk" onclick="generateBulkExam()" class="btn btn-success px-4 py-2 rounded-pill fw-bold shadow hover-lift w-100" disabled>
+                                                        <i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -399,6 +416,88 @@
     </div>
 </div>
 
+<div class="modal fade" id="templateLibraryModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-folder-open me-2"></i>Thư viện mẫu đề</h4>
+                    <p class="text-muted small mb-0">Lưu, mở lại và nhân bản các template sinh đề của bạn.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text bg-body-tertiary border-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                        <input type="text" id="templateLibrarySearch" class="form-control bg-body-tertiary border-0" placeholder="Tìm theo tên, tuần hoặc chủ đề..." oninput="renderTemplateLibraryList()">
+                    </div>
+                    <button type="button" class="btn btn-primary rounded-pill fw-bold px-4 flex-shrink-0" onclick="openSaveTemplateModal(true)">
+                        <i class="fa-solid fa-plus me-2"></i>Lưu bản hiện tại
+                    </button>
+                </div>
+                <div id="templateLibraryList" class="list-group rounded-4 overflow-hidden shadow-sm">
+                    <div class="list-group-item border-0 p-5 text-center text-muted">
+                        <i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i>
+                        <div>Đang tải thư viện...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="saveTemplateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-floppy-disk me-2"></i>Lưu mẫu đề</h4>
+                    <p class="text-muted small mb-0">Nội dung đang soạn trong editor sẽ được lưu vào thư viện.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="saveTemplateForm" onsubmit="event.preventDefault(); submitTemplateSave();">
+                    <input type="hidden" id="saveTemplateId">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">Tên mẫu <span class="text-danger">*</span></label>
+                            <input type="text" id="saveTemplateTitle" class="form-control bg-body-tertiary border-0 rounded-3 py-2" placeholder="VD: Tuần 2 - Giới hạn và liên tục" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Tuần</label>
+                            <input type="number" id="saveTemplateWeek" class="form-control bg-body-tertiary border-0 rounded-3 py-2" min="1" placeholder="VD: 2">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">Chủ đề</label>
+                            <input type="text" id="saveTemplateTopic" class="form-control bg-body-tertiary border-0 rounded-3 py-2" placeholder="VD: Vô cùng bé, giới hạn, gián đoạn">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Trạng thái</label>
+                            <select id="saveTemplateStatus" class="form-select bg-body-tertiary border-0 rounded-3 py-2">
+                                <option value="draft">Nháp</option>
+                                <option value="needs_review">Cần kiểm tra</option>
+                                <option value="ready">Đã ổn</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Ghi chú</label>
+                            <textarea id="saveTemplateDescription" class="form-control bg-body-tertiary border-0 rounded-3" rows="3" placeholder="VD: Bản đã sửa câu 6-8 theo góp ý của thầy."></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" id="btnSubmitTemplateSave" class="btn btn-primary rounded-pill px-5 fw-bold shadow hover-lift" onclick="submitTemplateSave()">
+                    Lưu mẫu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .nav-pills .list-group-item.active { background-color: #e0f0ff !important; color: #007bff !important; border-left: 4px solid #007bff !important; }
     .nav-tabs .nav-link.active { background-color: #007bff !important; color: white !important; border: none; }
@@ -473,7 +572,250 @@
     // JS QUẢN LÝ SINH ĐỀ VÀ GIAO DIỆN CHUYỂN TAB 
     // ==============================================================
     window.generatedVariants = [];
+    window.templateLibraryItems = [];
     let templateEditor;
+    let currentTemplateMeta = null;
+
+    function getTemplateEditorContent() {
+        return templateEditor ? templateEditor.getValue() : document.getElementById('templateInput').value;
+    }
+
+    function setTemplateEditorContent(content) {
+        if (templateEditor) {
+            templateEditor.setValue(content || '');
+            setTimeout(() => templateEditor.refresh(), 100);
+        } else {
+            document.getElementById('templateInput').value = content || '';
+        }
+    }
+
+    function templateStatusLabel(status) {
+        const labels = {
+            draft: { text: 'Nháp', cls: 'secondary' },
+            needs_review: { text: 'Cần kiểm tra', cls: 'warning' },
+            ready: { text: 'Đã ổn', cls: 'success' }
+        };
+        return labels[status] || labels.draft;
+    }
+
+    function updateCurrentTemplateBadge() {
+        const badge = document.getElementById('currentTemplateBadge');
+        if (!badge) return;
+        if (!currentTemplateMeta) {
+            badge.className = 'badge bg-light text-secondary border';
+            badge.textContent = 'Chưa lưu vào thư viện';
+            return;
+        }
+
+        const status = templateStatusLabel(currentTemplateMeta.status);
+        badge.className = `badge bg-${status.cls} bg-opacity-10 text-${status.cls} border border-${status.cls}`;
+        badge.textContent = `${currentTemplateMeta.title} • ${status.text}`;
+    }
+
+    function openSaveTemplateModal(forceNew = false) {
+        const content = getTemplateEditorContent().trim();
+        if (!content) {
+            alert('Editor đang rỗng, chưa có template để lưu.');
+            return;
+        }
+
+        const titleFallback = document.getElementById('customExamTitle').value.trim() || 'Mẫu đề mới';
+        const template = forceNew ? null : currentTemplateMeta;
+
+        document.getElementById('saveTemplateId').value = template ? template.id : '';
+        document.getElementById('saveTemplateTitle').value = template ? template.title : titleFallback;
+        document.getElementById('saveTemplateTopic').value = template ? (template.topic || '') : '';
+        document.getElementById('saveTemplateWeek').value = template && template.week_number ? template.week_number : '';
+        document.getElementById('saveTemplateStatus').value = template ? (template.status || 'draft') : 'draft';
+        document.getElementById('saveTemplateDescription').value = template ? (template.description || '') : '';
+
+        const modal = new bootstrap.Modal(document.getElementById('saveTemplateModal'));
+        modal.show();
+    }
+
+    function submitTemplateSave() {
+        const content = getTemplateEditorContent().trim();
+        const payload = {
+            id: document.getElementById('saveTemplateId').value || null,
+            title: document.getElementById('saveTemplateTitle').value.trim(),
+            topic: document.getElementById('saveTemplateTopic').value.trim(),
+            week_number: document.getElementById('saveTemplateWeek').value,
+            status: document.getElementById('saveTemplateStatus').value,
+            description: document.getElementById('saveTemplateDescription').value.trim(),
+            content
+        };
+
+        if (!payload.title) {
+            alert('Vui lòng nhập tên mẫu đề.');
+            return;
+        }
+        if (!payload.content) {
+            alert('Editor đang rỗng, chưa có template để lưu.');
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitTemplateSave');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang lưu...';
+
+        fetch('/api/template-library', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không lưu được mẫu đề.');
+                    return;
+                }
+                currentTemplateMeta = data.template;
+                updateCurrentTemplateBadge();
+                document.getElementById('customExamTitle').value = data.template.title;
+                bootstrap.Modal.getInstance(document.getElementById('saveTemplateModal'))?.hide();
+                refreshTemplateLibraryList(false);
+            })
+            .catch(() => alert('Lỗi kết nối khi lưu mẫu đề.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
+    function openTemplateLibraryModal() {
+        const modal = new bootstrap.Modal(document.getElementById('templateLibraryModal'));
+        modal.show();
+        refreshTemplateLibraryList(true);
+    }
+
+    function refreshTemplateLibraryList(showLoading = true) {
+        const listEl = document.getElementById('templateLibraryList');
+        if (showLoading && listEl) {
+            listEl.innerHTML = `<div class="list-group-item border-0 p-5 text-center text-muted"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tải thư viện...</div></div>`;
+        }
+
+        fetch('/api/template-library')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    if (listEl) listEl.innerHTML = `<div class="list-group-item border-0 p-4 text-danger">${escapeHtml(data.message || 'Không tải được thư viện.')}</div>`;
+                    return;
+                }
+                window.templateLibraryItems = data.templates || [];
+                renderTemplateLibraryList();
+            })
+            .catch(() => {
+                if (listEl) listEl.innerHTML = '<div class="list-group-item border-0 p-4 text-danger">Lỗi kết nối khi tải thư viện.</div>';
+            });
+    }
+
+    function renderTemplateLibraryList() {
+        const listEl = document.getElementById('templateLibraryList');
+        if (!listEl) return;
+
+        const keyword = (document.getElementById('templateLibrarySearch')?.value || '').trim().toLowerCase();
+        const items = (window.templateLibraryItems || []).filter((item) => {
+            const haystack = `${item.title} ${item.topic || ''} ${item.description || ''} ${item.week_number || ''}`.toLowerCase();
+            return !keyword || haystack.includes(keyword);
+        });
+
+        if (!items.length) {
+            listEl.innerHTML = `
+                <div class="list-group-item border-0 p-5 text-center text-muted">
+                    <i class="fa-solid fa-folder-open fs-1 opacity-25 mb-3"></i>
+                    <h6 class="fw-bold">Chưa có mẫu phù hợp</h6>
+                    <div class="small">Bấm “Lưu bản hiện tại” để tạo mẫu đầu tiên.</div>
+                </div>`;
+            return;
+        }
+
+        listEl.innerHTML = items.map((item) => {
+            const status = templateStatusLabel(item.status);
+            const weekText = item.week_number ? `Tuần ${item.week_number}` : 'Chưa gắn tuần';
+            return `
+                <div class="list-group-item border-0 border-bottom p-3 bg-body">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div class="min-w-0">
+                            <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                <h6 class="fw-bold mb-0 text-body">${escapeHtml(item.title)}</h6>
+                                <span class="badge bg-primary-subtle text-primary border">${escapeHtml(weekText)}</span>
+                                <span class="badge bg-${status.cls} bg-opacity-10 text-${status.cls} border border-${status.cls}">${status.text}</span>
+                            </div>
+                            <div class="small text-muted mb-1">${escapeHtml(item.topic || 'Chưa có chủ đề')}</div>
+                            <div class="small text-muted">Sửa lần cuối: ${escapeHtml(item.updated_at || '-')}</div>
+                            ${item.description ? `<div class="small mt-2 text-body-secondary">${escapeHtml(item.description)}</div>` : ''}
+                        </div>
+                        <div class="d-flex gap-2 flex-wrap justify-content-end flex-shrink-0">
+                            <button type="button" class="btn btn-sm btn-primary rounded-pill fw-bold" onclick="loadTemplateFromLibrary(${item.id})">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Mở
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold" onclick="duplicateTemplateInLibrary(${item.id})">
+                                <i class="fa-solid fa-copy me-1"></i>Nhân bản
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill fw-bold" onclick="deleteTemplateInLibrary(${item.id})">
+                                <i class="fa-solid fa-trash me-1"></i>Xóa
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    function loadTemplateFromLibrary(templateId) {
+        fetch(`/api/template-library/${templateId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không mở được mẫu đề.');
+                    return;
+                }
+                const template = data.template;
+                setTemplateEditorContent(template.content || '');
+                currentTemplateMeta = template;
+                updateCurrentTemplateBadge();
+                document.getElementById('customExamTitle').value = template.title || '';
+                document.getElementById('btnGenerateBulk').disabled = true;
+                document.getElementById('btnCheckAllQuestions').disabled = true;
+                document.getElementById('variantPreviewList').innerHTML = `<li class="list-group-item p-5 text-center text-muted border-0 h-100 d-flex flex-column justify-content-center align-items-center"><i class="fa-solid fa-laptop-code fs-1 opacity-25 mb-3"></i><em>Đã mở mẫu. Bấm "Xem trước" để sinh lại đề.</em></li>`;
+                bootstrap.Modal.getInstance(document.getElementById('templateLibraryModal'))?.hide();
+            })
+            .catch(() => alert('Lỗi kết nối khi mở mẫu đề.'));
+    }
+
+    function duplicateTemplateInLibrary(templateId) {
+        fetch(`/api/template-library/${templateId}/duplicate`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không nhân bản được mẫu đề.');
+                    return;
+                }
+                refreshTemplateLibraryList(false);
+            })
+            .catch(() => alert('Lỗi kết nối khi nhân bản mẫu đề.'));
+    }
+
+    function deleteTemplateInLibrary(templateId) {
+        const item = (window.templateLibraryItems || []).find((template) => template.id === templateId);
+        const templateTitle = item ? item.title : 'mẫu này';
+        if (!confirm(`Xóa mẫu "${templateTitle}" khỏi thư viện?`)) return;
+
+        fetch(`/api/template-library/${templateId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không xóa được mẫu đề.');
+                    return;
+                }
+                if (currentTemplateMeta && currentTemplateMeta.id === templateId) {
+                    currentTemplateMeta = null;
+                    updateCurrentTemplateBadge();
+                }
+                refreshTemplateLibraryList(false);
+            })
+            .catch(() => alert('Lỗi kết nối khi xóa mẫu đề.'));
+    }
 
 document.addEventListener("DOMContentLoaded", function () {
         // 1. Kích hoạt CodeMirror (Giữ nguyên phần khởi tạo cũ)
@@ -508,6 +850,7 @@ document.addEventListener("DOMContentLoaded", function () {
         
         // Đưa nội dung vào editor
         templateEditor.setValue(defaultTemplate);
+        updateCurrentTemplateBadge();
 
         // 3. Các đoạn xử lý expandWorkspaceLayout/resetWorkspaceLayout bên dưới giữ nguyên...
         setTimeout(() => {
@@ -814,6 +1157,8 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         
         if (templateEditor) {
             templateEditor.setValue(sampleText);
+            currentTemplateMeta = null;
+            updateCurrentTemplateBadge();
         }
     }
 
@@ -842,10 +1187,28 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                     window.generatedVariants = data.variants;
                     renderVariantList(data.variants);
                     document.getElementById('btnGenerateBulk').disabled = false;
+                    document.getElementById('btnCheckAllQuestions').disabled = !window.generatedQuestionReviews || !Object.keys(window.generatedQuestionReviews).length;
                 } else {
                     alert("Lỗi cấu trúc: " + data.message);
                 }
             });
+    }
+
+    function latexLengthToCss(length) {
+        const clean = String(length || '').trim();
+        if (/^\d*\.?\d+(em|ex|pt|px|cm|mm|in)$/.test(clean)) return clean;
+        if (/^\d*\.?\d+$/.test(clean)) return `${clean}em`;
+        return '0.5em';
+    }
+
+    function renderLatexLayoutCommands(text) {
+        return text
+            .replace(/\\par\s*\\vspace\*?\{([^{}]*)\}/g, (_, length) => `<span style="display:block;height:${latexLengthToCss(length)};"></span>`)
+            .replace(/\\vspace\*?\{([^{}]*)\}/g, (_, length) => `<span style="display:block;height:${latexLengthToCss(length)};"></span>`)
+            .replace(/\\smallskip\b/g, '<span style="display:block;height:0.35em;"></span>')
+            .replace(/\\medskip\b/g, '<span style="display:block;height:0.7em;"></span>')
+            .replace(/\\bigskip\b/g, '<span style="display:block;height:1em;"></span>')
+            .replace(/\\par\b/g, '<br>');
     }
 
 // Render kết quả phiên bản Fami-UI (Thuật toán bóc tách - Đóng gói Flexbox)
@@ -866,6 +1229,9 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             // 2. LẤY NỘI DUNG CHÍNH (Bỏ Preamble)
             const docMatch = displayHtml.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
             if (docMatch) displayHtml = docMatch[1];
+
+            // 2.1. LỆNH DÀN TRANG LATEX TRONG PREVIEW
+            displayHtml = renderLatexLayoutCommands(displayHtml);
 
             // 3. TIÊU ĐỀ SECTION
             displayHtml = displayHtml.replace(/\\begin\{section\}\{([^}]+)\}/g, '<h5 class="fw-bold mt-4 mb-3" style="color: #c92a2a; border-left: 4px solid #c92a2a; padding-left: 10px;">$1</h5>');
@@ -907,14 +1273,13 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 const questionNumber = qCounter;
                 const reviewId = `review-${String(vObj.seed).replace(/[^a-zA-Z0-9_-]/g, '_')}-${questionNumber}`;
                 window.generatedQuestionReviews[reviewId] = {
+                    id: reviewId,
                     seed: vObj.seed,
                     question_index: questionNumber,
                     content: match
                 };
 
-                let promptHtml = `<div class="mb-3" style="text-align: justify; white-space: normal; width: 100%; display: block;">
-                                    <strong style="color: #c92a2a;">Câu ${qCounter}.</strong> ${innerContent.trim()}
-                                  </div>`;
+                let promptHtml = `<div class="mb-3" style="text-align: justify; white-space: pre-line; width: 100%; display: block;"><strong style="color: #c92a2a;">Câu ${qCounter}.</strong> ${innerContent.trim()}</div>`;
                 qCounter++;
 
                 // BƯỚC 4.5: Lắp ráp Lưới Đáp án bằng Flexbox (Chống lệch, chống rớt dòng)
@@ -1038,6 +1403,80 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             .catch(() => {
                 resultEl.className = 'mt-3 alert alert-danger border-0 shadow-sm small';
                 resultEl.innerHTML = '<i class="fa-solid fa-circle-xmark me-2"></i>Lỗi kết nối khi kiểm tra câu hỏi.';
+            })
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
+    function renderBulkReviewSummary(data) {
+        const summaryEl = document.getElementById('reviewSummaryAlert');
+        if (!summaryEl) return;
+
+        const statusClass = data.status === 'ok' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
+        const iconClass = data.status === 'ok' ? 'fa-circle-check' : (data.status === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-xmark');
+        summaryEl.className = `alert alert-${statusClass} text-start mb-3 shadow-sm border-0 rounded-3 py-2 small`;
+        summaryEl.innerHTML = `
+            <div class="fw-bold">
+                <i class="fa-solid ${iconClass} me-2"></i>${escapeHtml(data.summary)}
+            </div>
+            <div class="text-muted">Đã kiểm tra toàn bộ câu hỏi trong tất cả seed đang preview.</div>
+        `;
+    }
+
+    function checkAllQuestions() {
+        const questions = window.generatedQuestionReviews ? Object.values(window.generatedQuestionReviews) : [];
+        const btn = document.getElementById('btnCheckAllQuestions');
+        const summaryEl = document.getElementById('reviewSummaryAlert');
+
+        if (!questions.length) {
+            alert('Chưa có câu hỏi nào để kiểm tra. Hãy bấm Xem trước trước.');
+            return;
+        }
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra toàn bộ...';
+        if (summaryEl) {
+            summaryEl.className = 'alert alert-info text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
+            summaryEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra toàn bộ câu hỏi trong các seed hiện tại...';
+        }
+
+        questions.forEach((item) => {
+            const resultEl = document.getElementById(`${item.id}-result`);
+            if (resultEl) {
+                resultEl.className = 'mt-3 alert alert-info border-0 shadow-sm small';
+                resultEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra trong lượt toàn bộ...';
+            }
+        });
+
+        fetch('/api/custom-exam/check-questions-ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questions })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    if (summaryEl) {
+                        summaryEl.className = 'alert alert-danger text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
+                        summaryEl.innerHTML = `<i class="fa-solid fa-circle-xmark me-2"></i>${escapeHtml(data.message || 'Không kiểm tra được toàn bộ đề.')}`;
+                    }
+                    return;
+                }
+
+                renderBulkReviewSummary(data);
+                (data.results || []).forEach((item) => {
+                    const resultEl = document.getElementById(`${item.id}-result`);
+                    if (resultEl) renderQuestionReview(resultEl, item);
+                });
+            })
+            .catch(() => {
+                if (summaryEl) {
+                    summaryEl.className = 'alert alert-danger text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
+                    summaryEl.innerHTML = '<i class="fa-solid fa-circle-xmark me-2"></i>Lỗi kết nối khi kiểm tra toàn bộ đề.';
+                }
             })
             .finally(() => {
                 btn.disabled = false;
