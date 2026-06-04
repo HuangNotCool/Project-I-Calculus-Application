@@ -42,8 +42,9 @@
                     id="nav-exam-tab" data-bs-toggle="pill" href="#tab-exam-generator" role="tab">
                     <i class="fa-solid fa-wand-magic-sparkles me-2"></i> Trình Sinh Đề Tự Động
                 </a>
-                <a class="list-group-item list-group-item-action fw-bold py-3 rounded-3 border-0" href="#">
-                    <i class="fa-solid fa-database me-2"></i> Ngân hàng câu hỏi (Dev)
+                <a class="list-group-item list-group-item-action fw-bold py-3 rounded-3 border-0"
+                    id="nav-exam-bank-tab" data-bs-toggle="pill" href="#tab-exam-bank" role="tab">
+                    <i class="fa-solid fa-database me-2"></i> Ngân hàng đề thi
                 </a>
             </div>
 
@@ -111,7 +112,7 @@
                                     <button class="btn btn-outline-primary rounded-pill w-50 fw-bold hover-lift"
                                         onclick="viewClassStudents({{ c.id }})">Xem Danh sách</button>
                                     <button class="btn rounded-pill w-50 fw-bold text-white hover-lift"
-                                        style="background-color: #007bff;">Giao Bài Tập</button>
+                                        style="background-color: #007bff;" onclick='openAssignExamModal({{ c.id }}, {{ c.name|tojson }})'>Giao Bài Tập</button>
                                 </div>
                             </div>
                         </div>
@@ -251,9 +252,19 @@
                             </div>
 
                             <div class="tab-pane fade show active" id="customMode" role="tabpanel">
-                                <div class="mb-4">
-                                    <label class="form-label fw-bold">Tiêu đề kỳ thi tùy chỉnh:</label>
-                                    <input type="text" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" id="customExamTitle" placeholder="VD: Đề kiểm tra 15 phút - Lớp 102...">
+                                <div class="row g-3 mb-4">
+                                    <div class="col-lg-6">
+                                        <label class="form-label fw-bold">Tiêu đề kỳ thi tùy chỉnh:</label>
+                                        <input type="text" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" id="customExamTitle" placeholder="VD: Đề kiểm tra 15 phút - Lớp 102...">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label fw-bold">Tuần</label>
+                                        <input type="number" min="1" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" id="customExamWeek" placeholder="VD: 2">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label fw-bold">Chủ đề</label>
+                                        <input type="text" class="form-control bg-body-tertiary border-0 py-2 px-3 rounded-3" id="customExamTopic" placeholder="VD: Giới hạn, liên tục">
+                                    </div>
                                 </div>
     
                                 <div class="row g-4 h-100">
@@ -351,6 +362,47 @@
                 </div>
             </div>
 
+            <div class="tab-pane fade" id="tab-exam-bank" role="tabpanel">
+                <div class="card shadow-sm border-0 rounded-4 bg-body mb-4">
+                    <div class="card-header bg-transparent border-bottom-0 pt-4 pb-0 px-4">
+                        <div class="d-flex justify-content-between align-items-center gap-3">
+                            <div>
+                                <h4 class="mb-1 fw-bold text-primary"><i class="fa-solid fa-database me-2"></i>Ngân hàng đề thi</h4>
+                                <p class="text-muted small mb-0">Các đề đã bấm Chốt Đề & Chuẩn Bị Xuất sẽ được lưu ở đây.</p>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary rounded-pill fw-bold px-4" onclick="loadExamBankPage()">
+                                <i class="fa-solid fa-rotate-right me-2"></i>Làm mới
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-4">
+                        <div class="row g-3 align-items-end mb-4">
+                            <div class="col-lg-5">
+                                <label class="form-label fw-bold small text-muted">Tìm kiếm</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-body-tertiary border-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                                    <input type="text" id="examBankSearchInput" class="form-control bg-body-tertiary border-0" placeholder="Tìm theo tên, chủ đề, ghi chú..." oninput="renderExamBankPageList()">
+                                </div>
+                            </div>
+                            <div class="col-md-3 col-lg-2">
+                                <label class="form-label fw-bold small text-muted">Tuần</label>
+                                <input type="number" min="1" id="examBankWeekFilter" class="form-control bg-body-tertiary border-0" placeholder="Tất cả" oninput="renderExamBankPageList()">
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label fw-bold small text-muted">Chủ đề</label>
+                                <input type="text" id="examBankTopicFilter" class="form-control bg-body-tertiary border-0" placeholder="VD: Giới hạn, liên tục..." oninput="renderExamBankPageList()">
+                            </div>
+                        </div>
+                        <div id="examBankPageList" class="row g-4">
+                            <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
+                                <i class="fa-solid fa-spinner fa-spin fs-2 text-primary mb-3"></i>
+                                <div class="text-muted">Đang tải ngân hàng đề thi...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -409,6 +461,203 @@
                     <div class="text-center py-5">
                         <i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i>
                         <p class="mt-2 text-muted">Đang tải dữ liệu...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="assignExamModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-paper-plane me-2"></i>Giao bài tập</h4>
+                    <p class="text-muted small mb-0" id="assignExamClassName">Lớp: Đang chọn...</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-4">
+                    <div class="col-lg-5">
+                        <div class="bg-body-tertiary rounded-4 p-4 h-100">
+                            <h6 class="fw-bold text-primary mb-3"><i class="fa-solid fa-clipboard-list me-2"></i>Thông tin bài giao</h6>
+                            <form id="assignExamForm" onsubmit="event.preventDefault(); submitAssignment();">
+                                <input type="hidden" id="assignClassId">
+                                <div class="mb-3 d-none" id="assignClassSelectArea">
+                                    <label class="form-label fw-bold">Lớp giao bài</label>
+                                    <div id="assignClassCheckboxList" class="bg-body rounded-3 p-3 border-0" style="max-height: 190px; overflow:auto;">
+                                        {% for c in classes %}
+                                        <div class="form-check mb-2">
+                                            <input class="form-check-input assign-class-checkbox" type="checkbox" value="{{ c.id }}" id="assignClassCheck{{ c.id }}" data-class-name="{{ c.name }}" onchange="handleAssignClassSelectChange()">
+                                            <label class="form-check-label fw-bold small" for="assignClassCheck{{ c.id }}">{{ c.name }} - {{ c.code }}</label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    <small class="text-muted d-block mt-1">Có thể chọn nhiều lớp khi giao từ ngân hàng đề thi.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Tiêu đề <span class="text-danger">*</span></label>
+                                    <input type="text" id="assignTitle" class="form-control bg-body border-0 rounded-3 py-2" placeholder="VD: Bài tập tuần 2" required>
+                                </div>
+                                <div class="mb-3" id="assignBankArea">
+                                    <label class="form-label fw-bold">Đề trong ngân hàng</label>
+                                    <select id="assignBankExamSelect" class="form-select bg-body border-0 rounded-3 py-2 mb-2" onchange="loadSelectedBankExamVariants()"></select>
+                                    <label class="form-label fw-bold small">Mã đề</label>
+                                    <select id="assignBankVariantSelect" class="form-select bg-body border-0 rounded-3 py-2"></select>
+                                    <small class="text-muted d-block mt-1">Ngân hàng được tạo khi bấm Chốt Đề & Chuẩn Bị Xuất.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Hạn nộp</label>
+                                    <input type="datetime-local" id="assignDueAt" class="form-control bg-body border-0 rounded-3 py-2">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Ghi chú</label>
+                                    <textarea id="assignDescription" class="form-control bg-body border-0 rounded-3" rows="3" placeholder="VD: Làm bài trực tuyến, mỗi câu tính điểm đều nhau."></textarea>
+                                </div>
+                                <div id="assignExamAlert" class="alert d-none small border-0 rounded-3"></div>
+                                <button type="submit" id="btnSubmitAssignment" class="btn btn-primary rounded-pill fw-bold px-4 w-100 shadow-sm">
+                                    <i class="fa-solid fa-paper-plane me-2"></i>Giao bài cho lớp
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="col-lg-7">
+                        <div class="bg-body-tertiary rounded-4 p-4 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="fw-bold text-success mb-0"><i class="fa-solid fa-chart-simple me-2"></i>Bài đã giao</h6>
+                                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold" onclick="loadClassAssignments()">
+                                    <i class="fa-solid fa-rotate-right me-1"></i>Làm mới
+                                </button>
+                            </div>
+                            <div id="classAssignmentList" class="list-group rounded-4 overflow-hidden shadow-sm">
+                                <div class="list-group-item border-0 p-5 text-center text-muted">Chọn lớp để xem bài đã giao.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editExamBankModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-pen-to-square me-2"></i>Sửa thông tin đề</h4>
+                    <p class="text-muted small mb-0">Cập nhật metadata để tìm kiếm và phân loại trong ngân hàng.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="editExamBankForm" onsubmit="event.preventDefault(); submitExamBankEdit();">
+                    <input type="hidden" id="editExamBankId">
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold">Tên đề <span class="text-danger">*</span></label>
+                            <input type="text" id="editExamBankTitle" class="form-control bg-body-tertiary border-0 rounded-3 py-2" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Tuần</label>
+                            <input type="number" id="editExamBankWeek" min="1" class="form-control bg-body-tertiary border-0 rounded-3 py-2" placeholder="VD: 2">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Chủ đề</label>
+                            <input type="text" id="editExamBankTopic" class="form-control bg-body-tertiary border-0 rounded-3 py-2" placeholder="VD: Giới hạn, liên tục">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Ghi chú</label>
+                            <textarea id="editExamBankDescription" class="form-control bg-body-tertiary border-0 rounded-3" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" id="btnSubmitExamBankEdit" class="btn btn-primary rounded-pill px-5 fw-bold shadow-sm" onclick="submitExamBankEdit()">
+                    Lưu thay đổi
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="assignmentResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-square-poll-vertical me-2"></i>Kết quả bài tập</h4>
+                    <p class="text-muted small mb-0" id="assignmentResultsTitle">Đang tải...</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="assignmentResultsList" class="list-group rounded-4 overflow-hidden shadow-sm">
+                    <div class="list-group-item border-0 p-5 text-center text-muted">
+                        <i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i>
+                        <div>Đang tải kết quả...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="examBankDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-file-lines me-2"></i><span id="examBankDetailTitle">Chi tiết đề</span></h4>
+                    <p class="text-muted small mb-0" id="examBankDetailMeta">Đang tải...</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div class="small text-muted">Xem lại từng mã đề đã lưu trong ngân hàng.</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a id="examBankDetailDownloadTex" href="#" class="btn btn-sm btn-outline-primary rounded-pill fw-bold">
+                            <i class="fa-solid fa-file-code me-1"></i>Tải TEX toàn bộ
+                        </a>
+                        <a id="examBankDetailDownloadPdf" href="#" class="btn btn-sm btn-primary rounded-pill fw-bold">
+                            <i class="fa-solid fa-file-pdf me-1"></i>Tải PDF toàn bộ
+                        </a>
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-lg-3">
+                        <div class="bg-body-tertiary rounded-4 p-3 h-100">
+                            <div class="fw-bold text-primary mb-2"><i class="fa-solid fa-list me-2"></i>Mã đề</div>
+                            <div id="examBankVariantList" class="list-group rounded-4 overflow-hidden shadow-sm">
+                                <div class="list-group-item border-0 p-4 text-center text-muted">Đang tải...</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-9">
+                        <div class="bg-body-tertiary rounded-4 p-3">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                                <div class="fw-bold text-primary" id="examBankSelectedVariantTitle">Preview mã đề</div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a id="examBankVariantDownloadTex" href="#" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold">
+                                        <i class="fa-solid fa-file-code me-1"></i>TEX mã này
+                                    </a>
+                                    <a id="examBankVariantDownloadPdf" href="#" class="btn btn-sm btn-outline-danger rounded-pill fw-bold">
+                                        <i class="fa-solid fa-file-pdf me-1"></i>PDF mã này
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold" onclick="assignCurrentBankVariant()">
+                                        <i class="fa-solid fa-paper-plane me-1"></i>Giao mã này
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="examBankDetailPreview" class="bg-body rounded-4 border p-4 overflow-auto" style="max-height: 70vh;">
+                                <div class="text-center text-muted py-5">Chọn mã đề để preview.</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -566,6 +815,794 @@
                     });
                 } else { alert("Lỗi: " + data.message); modal.hide(); }
             }).catch(err => { alert("Lỗi kết nối!"); modal.hide(); });
+    }
+
+    let currentAssignClassId = null;
+    let pendingAssignBankExamId = null;
+    let pendingAssignBankVariantIndex = null;
+    let currentBankDetailExam = null;
+    let currentBankDetailVariantIndex = 0;
+    window.examBankItems = [];
+    window.examBankVariants = [];
+
+    function openAssignExamModal(classId, className) {
+        currentAssignClassId = classId;
+        pendingAssignBankExamId = null;
+        pendingAssignBankVariantIndex = null;
+        document.getElementById('assignClassId').value = classId;
+        document.getElementById('assignExamClassName').textContent = `Lớp: ${className}`;
+        document.getElementById('assignClassSelectArea').classList.add('d-none');
+        document.getElementById('assignTitle').value = `Bài tập ${className}`;
+        document.getElementById('assignDescription').value = '';
+        document.getElementById('assignDueAt').value = '';
+        document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
+
+        loadExamBankForAssignment();
+        loadClassAssignments();
+
+        const modal = new bootstrap.Modal(document.getElementById('assignExamModal'));
+        modal.show();
+    }
+
+    function getSelectedAssignClassIds() {
+        if (document.getElementById('assignClassSelectArea').classList.contains('d-none')) {
+            return currentAssignClassId ? [String(currentAssignClassId)] : [];
+        }
+        return Array.from(document.querySelectorAll('.assign-class-checkbox:checked')).map((item) => item.value);
+    }
+
+    function handleAssignClassSelectChange() {
+        const selected = Array.from(document.querySelectorAll('.assign-class-checkbox:checked'));
+        if (!selected.length) {
+            currentAssignClassId = null;
+            document.getElementById('assignClassId').value = '';
+            document.getElementById('assignExamClassName').textContent = 'Lớp: Chưa chọn lớp';
+            document.getElementById('classAssignmentList').innerHTML = '<div class="list-group-item border-0 p-5 text-center text-muted">Chọn lớp để xem bài đã giao.</div>';
+            return;
+        }
+
+        currentAssignClassId = selected[0].value;
+        document.getElementById('assignClassId').value = selected[0].value;
+        const firstName = selected[0].dataset.className || selected[0].nextElementSibling?.textContent || selected[0].value;
+        document.getElementById('assignExamClassName').textContent = selected.length === 1
+            ? `Lớp: ${firstName}`
+            : `Lớp: ${selected.length} lớp đã chọn`;
+        loadClassAssignments();
+    }
+
+    function openAssignExamFromBankPage(examId, variantIndex = null) {
+        const classChecks = Array.from(document.querySelectorAll('.assign-class-checkbox'));
+        if (!classChecks.length) {
+            alert('Bạn cần tạo lớp trước khi giao đề.');
+            return;
+        }
+
+        const exam = (window.examBankItems || []).find((item) => Number(item.id) === Number(examId));
+        pendingAssignBankExamId = examId;
+        pendingAssignBankVariantIndex = variantIndex !== null && Number.isInteger(Number(variantIndex)) ? Number(variantIndex) : null;
+        document.getElementById('assignClassSelectArea').classList.remove('d-none');
+        document.getElementById('assignTitle').value = exam ? exam.title : 'Bài tập từ ngân hàng đề';
+        document.getElementById('assignDescription').value = exam && exam.description ? exam.description : '';
+        document.getElementById('assignDueAt').value = '';
+        document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
+
+        if (!classChecks.some((item) => item.checked)) {
+            classChecks[0].checked = true;
+        }
+        handleAssignClassSelectChange();
+        loadExamBankForAssignment();
+
+        const modal = new bootstrap.Modal(document.getElementById('assignExamModal'));
+        modal.show();
+    }
+
+    function loadExamBankPage() {
+        const listEl = document.getElementById('examBankPageList');
+        if (!listEl) return;
+
+        listEl.innerHTML = `
+            <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
+                <i class="fa-solid fa-spinner fa-spin fs-2 text-primary mb-3"></i>
+                <div class="text-muted">Đang tải ngân hàng đề thi...</div>
+            </div>`;
+
+        fetch('/api/exam-bank')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    listEl.innerHTML = `<div class="col-12 alert alert-danger border-0 shadow-sm">${escapeHtml(data.message || 'Không tải được ngân hàng đề thi.')}</div>`;
+                    return;
+                }
+
+                window.examBankItems = data.exams || [];
+                renderExamBankPageList();
+                return;
+                if (!window.examBankItems.length) {
+                    listEl.innerHTML = `
+                        <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
+                            <i class="fa-solid fa-database fs-1 text-muted opacity-50 mb-3"></i>
+                            <h5 class="fw-bold text-body">Ngân hàng đề thi đang trống</h5>
+                            <p class="text-muted small mb-0">Sau khi bấm Chốt Đề & Chuẩn Bị Xuất, đề sẽ xuất hiện ở đây.</p>
+                        </div>`;
+                    return;
+                }
+
+                listEl.innerHTML = window.examBankItems.map((exam) => {
+                    return `
+                        <div class="col-md-6 col-xl-4">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-body feature-card-hover">
+                                <div class="card-body p-4 d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 52px; height: 52px;">
+                                            <i class="fa-solid fa-file-circle-check fs-4"></i>
+                                        </div>
+                                        <span class="badge bg-primary-subtle text-primary border rounded-pill">${exam.total_variants} mã đề</span>
+                                    </div>
+                                    <h5 class="fw-bold text-body mb-2">${escapeHtml(exam.title)}</h5>
+                                    <div class="small text-muted mb-1"><i class="fa-solid fa-list-ol me-1"></i>${exam.total_questions || 0} câu mỗi mã đề</div>
+                                    <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Chốt lúc: ${escapeHtml(exam.created_at || '-')}</div>
+                                    ${exam.description ? `<p class="small text-muted mb-4">${escapeHtml(exam.description)}</p>` : ''}
+                                    <div class="d-flex gap-2 mt-auto">
+                                        <button type="button" class="btn btn-outline-primary rounded-pill fw-bold flex-grow-1" onclick="openExamBankDetail(${exam.id})">
+                                            <i class="fa-solid fa-eye me-2"></i>Chi tiết
+                                        </button>
+                                        <button type="button" class="btn btn-primary rounded-pill fw-bold flex-grow-1" onclick="openAssignExamFromBankPage(${exam.id})">
+                                            <i class="fa-solid fa-paper-plane me-2"></i>Giao đề này
+                                        </button>
+                                        <button type="button" class="btn btn-outline-danger rounded-pill fw-bold px-3" title="Xóa khỏi ngân hàng" onclick="deleteExamBankItem(${exam.id})">
+                                            <i class="fa-solid fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+            })
+            .catch(() => {
+                listEl.innerHTML = '<div class="col-12 alert alert-danger border-0 shadow-sm">Lỗi kết nối khi tải ngân hàng đề thi.</div>';
+            });
+    }
+
+    function renderExamBankPageList() {
+        const listEl = document.getElementById('examBankPageList');
+        if (!listEl) return;
+
+        const search = (document.getElementById('examBankSearchInput')?.value || '').trim().toLowerCase();
+        const week = (document.getElementById('examBankWeekFilter')?.value || '').trim();
+        const topic = (document.getElementById('examBankTopicFilter')?.value || '').trim().toLowerCase();
+        const items = (window.examBankItems || []).filter((exam) => {
+            const haystack = `${exam.title || ''} ${exam.topic || ''} ${exam.description || ''}`.toLowerCase();
+            const matchesSearch = !search || haystack.includes(search);
+            const matchesWeek = !week || String(exam.week_number || '') === week;
+            const matchesTopic = !topic || String(exam.topic || '').toLowerCase().includes(topic);
+            return matchesSearch && matchesWeek && matchesTopic;
+        });
+
+        if (!window.examBankItems.length) {
+            listEl.innerHTML = `
+                <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
+                    <i class="fa-solid fa-database fs-1 text-muted opacity-50 mb-3"></i>
+                    <h5 class="fw-bold text-body">Ngân hàng đề thi đang trống</h5>
+                    <p class="text-muted small mb-0">Sau khi bấm Chốt Đề & Chuẩn Bị Xuất, đề sẽ xuất hiện ở đây.</p>
+                </div>`;
+            return;
+        }
+
+        if (!items.length) {
+            listEl.innerHTML = `
+                <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
+                    <i class="fa-solid fa-filter-circle-xmark fs-1 text-muted opacity-50 mb-3"></i>
+                    <h5 class="fw-bold text-body">Không có đề phù hợp bộ lọc</h5>
+                    <p class="text-muted small mb-0">Thử đổi từ khóa, tuần hoặc chủ đề.</p>
+                </div>`;
+            return;
+        }
+
+        listEl.innerHTML = items.map((exam) => `
+            <div class="col-md-6 col-xl-4">
+                <div class="card border-0 shadow-sm rounded-4 h-100 bg-body feature-card-hover">
+                    <div class="card-body p-4 d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 52px; height: 52px;">
+                                <i class="fa-solid fa-file-circle-check fs-4"></i>
+                            </div>
+                            <span class="badge bg-primary-subtle text-primary border rounded-pill">${exam.total_variants} mã đề</span>
+                        </div>
+                        <h5 class="fw-bold text-body mb-2">${escapeHtml(exam.title)}</h5>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            ${exam.week_number ? `<span class="badge bg-warning-subtle text-warning-emphasis border rounded-pill">Tuần ${escapeHtml(exam.week_number)}</span>` : ''}
+                            ${exam.topic ? `<span class="badge bg-success-subtle text-success-emphasis border rounded-pill">${escapeHtml(exam.topic)}</span>` : ''}
+                        </div>
+                        <div class="small text-muted mb-1"><i class="fa-solid fa-list-ol me-1"></i>${exam.total_questions || 0} câu mỗi mã đề</div>
+                        <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Chốt lúc: ${escapeHtml(exam.created_at || '-')}</div>
+                        ${exam.description ? `<p class="small text-muted mb-4">${escapeHtml(exam.description)}</p>` : ''}
+                        <div class="d-flex flex-wrap gap-2 mt-auto">
+                            <button type="button" class="btn btn-outline-primary rounded-pill fw-bold flex-grow-1" onclick="openExamBankDetail(${exam.id})">
+                                <i class="fa-solid fa-eye me-2"></i>Chi tiết
+                            </button>
+                            <button type="button" class="btn btn-primary rounded-pill fw-bold flex-grow-1" onclick="openAssignExamFromBankPage(${exam.id})">
+                                <i class="fa-solid fa-paper-plane me-2"></i>Giao đề
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary rounded-pill fw-bold px-3" title="Sửa thông tin" onclick="openEditExamBankModal(${exam.id})">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-danger rounded-pill fw-bold px-3" title="Xóa khỏi ngân hàng" onclick="deleteExamBankItem(${exam.id})">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function openExamBankDetail(examId, variantIndex = 0) {
+        currentBankDetailExam = null;
+        currentBankDetailVariantIndex = Number(variantIndex) || 0;
+        document.getElementById('examBankDetailTitle').textContent = 'Chi tiết đề';
+        document.getElementById('examBankDetailMeta').textContent = 'Đang tải...';
+        document.getElementById('examBankVariantList').innerHTML = '<div class="list-group-item border-0 p-4 text-center text-muted"><i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tải...</div>';
+        document.getElementById('examBankDetailPreview').innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tải preview...</div>';
+        document.getElementById('examBankDetailDownloadTex').href = `/download/exam-bank/${examId}/tex`;
+        document.getElementById('examBankDetailDownloadPdf').href = `/download/exam-bank/${examId}/pdf`;
+
+        const modal = new bootstrap.Modal(document.getElementById('examBankDetailModal'));
+        modal.show();
+
+        fetch(`/api/exam-bank/${examId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    document.getElementById('examBankDetailPreview').innerHTML = `<div class="alert alert-danger border-0">${escapeHtml(data.message || 'Không tải được chi tiết đề.')}</div>`;
+                    return;
+                }
+
+                currentBankDetailExam = data.exam;
+                const existingIndex = (window.examBankItems || []).findIndex((item) => Number(item.id) === Number(data.exam.id));
+                if (existingIndex >= 0) {
+                    window.examBankItems[existingIndex] = { ...window.examBankItems[existingIndex], ...data.exam };
+                } else {
+                    window.examBankItems = [data.exam, ...(window.examBankItems || [])];
+                }
+
+                document.getElementById('examBankDetailTitle').textContent = data.exam.title || 'Chi tiết đề';
+                document.getElementById('examBankDetailMeta').textContent = `${data.exam.total_variants || 0} mã đề • ${data.exam.total_questions || 0} câu mỗi mã • Chốt lúc ${data.exam.created_at || '-'}`;
+                renderExamBankVariantList();
+                selectExamBankVariant(currentBankDetailVariantIndex);
+            })
+            .catch(() => {
+                document.getElementById('examBankDetailPreview').innerHTML = '<div class="alert alert-danger border-0">Lỗi kết nối khi tải chi tiết đề.</div>';
+            });
+    }
+
+    function renderExamBankVariantList() {
+        const listEl = document.getElementById('examBankVariantList');
+        const variants = currentBankDetailExam && Array.isArray(currentBankDetailExam.variants) ? currentBankDetailExam.variants : [];
+
+        if (!variants.length) {
+            listEl.innerHTML = '<div class="list-group-item border-0 p-4 text-center text-muted">Đề này chưa có mã đề.</div>';
+            return;
+        }
+
+        listEl.innerHTML = variants.map((variant, index) => `
+            <button type="button" class="list-group-item list-group-item-action border-0 d-flex justify-content-between align-items-center" data-bank-variant-index="${index}" onclick="selectExamBankVariant(${index})">
+                <span class="fw-bold">Seed ${escapeHtml(variant.seed)}</span>
+                <i class="fa-solid fa-chevron-right small text-muted"></i>
+            </button>
+        `).join('');
+    }
+
+    function selectExamBankVariant(index) {
+        const variants = currentBankDetailExam && Array.isArray(currentBankDetailExam.variants) ? currentBankDetailExam.variants : [];
+        if (!variants.length) return;
+
+        const safeIndex = variants[index] ? index : 0;
+        currentBankDetailVariantIndex = safeIndex;
+        const variant = variants[safeIndex];
+        const examId = currentBankDetailExam.id;
+
+        document.querySelectorAll('#examBankVariantList [data-bank-variant-index]').forEach((btn) => {
+            btn.classList.toggle('active', Number(btn.dataset.bankVariantIndex) === safeIndex);
+        });
+
+        document.getElementById('examBankSelectedVariantTitle').textContent = `Preview mã đề: Seed ${variant.seed}`;
+        document.getElementById('examBankVariantDownloadTex').href = `/download/exam-bank/${examId}/variant/${safeIndex}/tex`;
+        document.getElementById('examBankVariantDownloadPdf').href = `/download/exam-bank/${examId}/variant/${safeIndex}/pdf`;
+        renderBankVariantPreview(variant);
+    }
+
+    function renderBankVariantPreview(variant) {
+        const container = document.getElementById('examBankDetailPreview');
+        let displayHtml = variant && variant.content ? variant.content : '';
+        if (!displayHtml.trim()) {
+            container.innerHTML = '<div class="text-center text-muted py-5">Mã đề này chưa có nội dung.</div>';
+            return;
+        }
+
+        displayHtml = displayHtml.replace(/(?:^|\n)[ \t]*%.*/g, '');
+        const docMatch = displayHtml.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+        if (docMatch) displayHtml = docMatch[1];
+        displayHtml = renderLatexLayoutCommands(displayHtml);
+        displayHtml = displayHtml.replace(/\\begin\{section\}\{([^}]+)\}/g, '<h5 class="fw-bold mt-4 mb-3" style="color: #c92a2a; border-left: 4px solid #c92a2a; padding-left: 10px;">$1</h5>');
+        displayHtml = displayHtml.replace(/\\end\{section\}/g, '');
+
+        let qCounter = 1;
+        displayHtml = displayHtml.replace(/\\begin\{question\}([\s\S]*?)\\end\{question\}/g, (match, qContent) => {
+            let innerContent = qContent;
+            let solutionHtml = '';
+
+            innerContent = innerContent.replace(/\\begin\{solution\}([\s\S]*?)\\end\{solution\}/, (m, sol) => {
+                solutionHtml = `<div class="mt-3 pt-3 w-100 border-top" style="border-top-style: dashed !important; clear: both;">
+                                    <strong style="color: #c92a2a;"><i class="fa-solid fa-play me-2"></i>Lời giải:</strong>
+                                    <div style="margin-top: 5px; white-space: normal;">${sol.trim()}</div>
+                                </div>`;
+                return '';
+            });
+
+            let columns = 1;
+            const colMatch = innerContent.match(/\\DatCot\[(\d+)\]/);
+            if (colMatch) {
+                columns = parseInt(colMatch[1], 10);
+                innerContent = innerContent.replace(colMatch[0], '');
+            }
+
+            const options = [];
+            const optRegex = /\\(Dung|Sai)\{((?:[^{}]|\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\})*)\}/g;
+            innerContent = innerContent.replace(optRegex, (m, type, text) => {
+                options.push({ type, text: text.trim() });
+                return '';
+            });
+
+            const promptHtml = `<div class="mb-3" style="text-align: justify; white-space: pre-line; width: 100%; display: block;"><strong style="color: #c92a2a;">Câu ${qCounter}.</strong> ${innerContent.trim()}</div>`;
+            qCounter++;
+
+            let optionsHtml = '';
+            if (options.length) {
+                const widthPercent = columns > 1 ? (100 / columns) : 100;
+                optionsHtml = '<div style="display: flex; flex-wrap: wrap; width: 100%; margin-bottom: 10px; box-sizing: border-box;">';
+                options.forEach((opt, idx) => {
+                    const label = String.fromCharCode(65 + idx);
+                    const style = opt.type === 'Dung'
+                        ? 'background-color: #fff0f0; border: 1px solid #c92a2a; color: #c92a2a;'
+                        : 'background-color: #f8f9fa; border: 1px solid #dee2e6; color: #212529;';
+                    optionsHtml += `
+                        <div style="width: calc(${widthPercent}% - 12px); margin-right: 12px; margin-bottom: 12px; box-sizing: border-box;">
+                            <div style="${style} padding: 8px 15px; border-radius: 6px; text-align: left; display: flex; align-items: flex-start; height: 100%;">
+                                <strong style="margin-right: 8px; flex-shrink: 0;">${label}.</strong>
+                                <span style="white-space: normal; overflow-wrap: break-word; width: 100%;">${opt.text}</span>
+                            </div>
+                        </div>`;
+                });
+                optionsHtml += '</div>';
+            }
+
+            return `<div class="card mb-4 border-secondary-subtle shadow-sm">
+                        <div class="card-body p-4" style="white-space: normal;">
+                            ${promptHtml}
+                            ${optionsHtml}
+                            ${solutionHtml}
+                        </div>
+                    </div>`;
+        });
+
+        container.innerHTML = displayHtml.trim() || '<div class="text-center text-muted py-5">Không có nội dung preview.</div>';
+        if (window.MathJax) { MathJax.typesetPromise([container]); }
+    }
+
+    function assignCurrentBankVariant() {
+        if (!currentBankDetailExam) {
+            alert('Chưa chọn đề trong ngân hàng.');
+            return;
+        }
+
+        const modalEl = document.getElementById('examBankDetailModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+        openAssignExamFromBankPage(currentBankDetailExam.id, currentBankDetailVariantIndex);
+    }
+
+    function openEditExamBankModal(examId) {
+        const exam = (window.examBankItems || []).find((item) => Number(item.id) === Number(examId));
+        if (!exam) {
+            alert('Không tìm thấy đề trong danh sách hiện tại.');
+            return;
+        }
+
+        document.getElementById('editExamBankId').value = exam.id;
+        document.getElementById('editExamBankTitle').value = exam.title || '';
+        document.getElementById('editExamBankWeek').value = exam.week_number || '';
+        document.getElementById('editExamBankTopic').value = exam.topic || '';
+        document.getElementById('editExamBankDescription').value = exam.description || '';
+
+        const modal = new bootstrap.Modal(document.getElementById('editExamBankModal'));
+        modal.show();
+    }
+
+    function submitExamBankEdit() {
+        const examId = document.getElementById('editExamBankId').value;
+        const payload = {
+            title: document.getElementById('editExamBankTitle').value.trim(),
+            week_number: document.getElementById('editExamBankWeek').value,
+            topic: document.getElementById('editExamBankTopic').value.trim(),
+            description: document.getElementById('editExamBankDescription').value.trim()
+        };
+
+        if (!payload.title) {
+            alert('Vui lòng nhập tên đề.');
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitExamBankEdit');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang lưu...';
+
+        fetch(`/api/exam-bank/${examId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không cập nhật được đề.');
+                    return;
+                }
+                const updated = data.exam;
+                const index = (window.examBankItems || []).findIndex((item) => Number(item.id) === Number(updated.id));
+                if (index >= 0) {
+                    window.examBankItems[index] = { ...window.examBankItems[index], ...updated };
+                }
+                if (currentBankDetailExam && Number(currentBankDetailExam.id) === Number(updated.id)) {
+                    currentBankDetailExam = { ...currentBankDetailExam, ...updated };
+                    document.getElementById('examBankDetailTitle').textContent = currentBankDetailExam.title || 'Chi tiết đề';
+                    document.getElementById('examBankDetailMeta').textContent = `${currentBankDetailExam.total_variants || 0} mã đề • ${currentBankDetailExam.total_questions || 0} câu mỗi mã • Chốt lúc ${currentBankDetailExam.created_at || '-'}`;
+                }
+                renderExamBankPageList();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editExamBankModal'));
+                if (modal) modal.hide();
+            })
+            .catch(() => alert('Lỗi kết nối khi cập nhật đề.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
+    function deleteExamBankItem(examId) {
+        const exam = (window.examBankItems || []).find((item) => Number(item.id) === Number(examId));
+        const examTitle = exam ? exam.title : 'đề này';
+        if (!confirm(`Xóa "${examTitle}" khỏi ngân hàng đề thi? Các bài đã giao trước đó sẽ không bị ảnh hưởng.`)) {
+            return;
+        }
+
+        fetch(`/api/exam-bank/${examId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không xóa được đề khỏi ngân hàng.');
+                    return;
+                }
+                if (pendingAssignBankExamId && Number(pendingAssignBankExamId) === Number(examId)) {
+                    pendingAssignBankExamId = null;
+                    window.examBankVariants = [];
+                }
+                loadExamBankPage();
+            })
+            .catch(() => alert('Lỗi kết nối khi xóa đề khỏi ngân hàng.'));
+    }
+
+    function loadExamBankForAssignment() {
+        const examSelect = document.getElementById('assignBankExamSelect');
+        const variantSelect = document.getElementById('assignBankVariantSelect');
+        const btn = document.getElementById('btnSubmitAssignment');
+
+        examSelect.disabled = true;
+        variantSelect.disabled = true;
+        btn.disabled = true;
+        examSelect.innerHTML = '<option>Đang tải ngân hàng đề...</option>';
+        variantSelect.innerHTML = '<option>Chọn đề trước</option>';
+
+        fetch('/api/exam-bank')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    examSelect.innerHTML = '<option>Không tải được ngân hàng đề</option>';
+                    showAssignAlert('danger', escapeHtml(data.message || 'Không tải được ngân hàng đề.'));
+                    return;
+                }
+
+                window.examBankItems = data.exams || [];
+                if (!window.examBankItems.length) {
+                    examSelect.innerHTML = '<option>Ngân hàng đề đang trống</option>';
+                    variantSelect.innerHTML = '<option>Chưa có mã đề</option>';
+                    return;
+                }
+
+                examSelect.disabled = false;
+                examSelect.innerHTML = window.examBankItems.map((exam) => {
+                    return `<option value="${exam.id}">${escapeHtml(exam.title)} (${exam.total_variants} mã, ${exam.total_questions} câu)</option>`;
+                }).join('');
+                if (pendingAssignBankExamId && window.examBankItems.some((exam) => Number(exam.id) === Number(pendingAssignBankExamId))) {
+                    examSelect.value = String(pendingAssignBankExamId);
+                }
+                loadSelectedBankExamVariants();
+            })
+            .catch(() => {
+                examSelect.innerHTML = '<option>Lỗi kết nối</option>';
+                showAssignAlert('danger', 'Lỗi kết nối khi tải ngân hàng đề.');
+            });
+    }
+
+    function loadSelectedBankExamVariants() {
+        const examId = document.getElementById('assignBankExamSelect').value;
+        const variantSelect = document.getElementById('assignBankVariantSelect');
+        const btn = document.getElementById('btnSubmitAssignment');
+        const selectedExam = (window.examBankItems || []).find((exam) => String(exam.id) === String(examId));
+
+        variantSelect.disabled = true;
+        btn.disabled = true;
+        variantSelect.innerHTML = '<option>Đang tải mã đề...</option>';
+        window.examBankVariants = [];
+
+        if (!examId) {
+            variantSelect.innerHTML = '<option>Chọn đề trước</option>';
+            return;
+        }
+
+        fetch(`/api/exam-bank/${examId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    variantSelect.innerHTML = '<option>Không tải được mã đề</option>';
+                    showAssignAlert('danger', escapeHtml(data.message || 'Không tải được mã đề trong ngân hàng.'));
+                    return;
+                }
+
+                window.examBankVariants = data.exam.variants || [];
+                if (!window.examBankVariants.length) {
+                    variantSelect.innerHTML = '<option>Đề này chưa có mã đề</option>';
+                    return;
+                }
+
+                variantSelect.disabled = false;
+                btn.disabled = false;
+                variantSelect.innerHTML = window.examBankVariants.map((variant, index) => {
+                    return `<option value="${index}">Seed ${escapeHtml(variant.seed)}</option>`;
+                }).join('');
+                if (pendingAssignBankVariantIndex !== null && window.examBankVariants[pendingAssignBankVariantIndex]) {
+                    variantSelect.value = String(pendingAssignBankVariantIndex);
+                }
+
+                if (selectedExam && !document.getElementById('assignTitle').value.trim()) {
+                    document.getElementById('assignTitle').value = selectedExam.title;
+                }
+            })
+            .catch(() => {
+                variantSelect.innerHTML = '<option>Lỗi kết nối</option>';
+                showAssignAlert('danger', 'Lỗi kết nối khi tải mã đề trong ngân hàng.');
+            });
+    }
+
+    function showAssignAlert(type, message) {
+        const alertEl = document.getElementById('assignExamAlert');
+        alertEl.className = `alert alert-${type} small border-0 rounded-3`;
+        alertEl.innerHTML = message;
+    }
+
+    function submitAssignment() {
+        const classIds = getSelectedAssignClassIds();
+        const selectedIndex = document.getElementById('assignBankVariantSelect').value;
+        const variant = window.examBankVariants && window.examBankVariants[Number(selectedIndex)];
+
+        if (!classIds.length) {
+            showAssignAlert('warning', 'Vui lòng chọn ít nhất một lớp để giao bài.');
+            return;
+        }
+        if (!variant) {
+            showAssignAlert('warning', 'Chưa chọn được mã đề trong ngân hàng để giao.');
+            return;
+        }
+
+        const payload = {
+            class_id: classIds[0],
+            class_ids: classIds,
+            title: document.getElementById('assignTitle').value.trim(),
+            description: document.getElementById('assignDescription').value.trim(),
+            due_at: document.getElementById('assignDueAt').value,
+            content_tex: variant.content
+        };
+
+        if (!payload.title) {
+            showAssignAlert('warning', 'Vui lòng nhập tiêu đề bài tập.');
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitAssignment');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang giao...';
+
+        fetch('/api/teacher/assignments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showAssignAlert('danger', escapeHtml(data.message || 'Không giao được bài tập.'));
+                    return;
+                }
+                showAssignAlert('success', `<i class="fa-solid fa-circle-check me-2"></i>${escapeHtml(data.message || 'Đã giao bài tập cho lớp.')}`);
+                loadClassAssignments();
+            })
+            .catch(() => showAssignAlert('danger', 'Lỗi kết nối khi giao bài tập.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
+    function loadClassAssignments() {
+        const listEl = document.getElementById('classAssignmentList');
+        const classId = currentAssignClassId || document.getElementById('assignClassId').value;
+        if (!classId || !listEl) return;
+
+        listEl.innerHTML = `<div class="list-group-item border-0 p-5 text-center text-muted"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tải bài đã giao...</div></div>`;
+
+        fetch(`/api/teacher/class/${classId}/assignments`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    listEl.innerHTML = `<div class="list-group-item border-0 p-4 text-danger">${escapeHtml(data.message || 'Không tải được danh sách bài giao.')}</div>`;
+                    return;
+                }
+
+                const assignments = data.assignments || [];
+                if (!assignments.length) {
+                    listEl.innerHTML = `
+                        <div class="list-group-item border-0 p-5 text-center text-muted">
+                            <i class="fa-solid fa-clipboard fs-1 opacity-25 mb-3"></i>
+                            <h6 class="fw-bold">Chưa có bài nào được giao</h6>
+                            <div class="small">Chọn đề trong ngân hàng rồi bấm Giao bài cho lớp.</div>
+                        </div>`;
+                    return;
+                }
+
+                listEl.innerHTML = assignments.map((assignment) => {
+                    const dueText = assignment.due_at ? `Hạn: ${escapeHtml(assignment.due_at)}` : 'Không đặt hạn';
+                    return `
+                        <div class="list-group-item border-0 border-bottom p-3 bg-body">
+                            <div class="d-flex justify-content-between align-items-start gap-3">
+                                <div>
+                                    <h6 class="fw-bold text-body mb-1">${escapeHtml(assignment.title)}</h6>
+                                    <div class="small text-muted">${assignment.total_questions} câu • ${dueText}</div>
+                                    <div class="small text-muted">Đã nộp: ${assignment.submission_count}</div>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill fw-bold flex-shrink-0" onclick="openAssignmentResults(${assignment.id})">
+                                    <i class="fa-solid fa-chart-simple me-1"></i>Xem điểm
+                                </button>
+                            </div>
+                        </div>`;
+                }).join('');
+            })
+            .catch(() => {
+                listEl.innerHTML = '<div class="list-group-item border-0 p-4 text-danger">Lỗi kết nối khi tải bài đã giao.</div>';
+            });
+    }
+
+    function openAssignmentResults(assignmentId) {
+        const modal = new bootstrap.Modal(document.getElementById('assignmentResultsModal'));
+        const listEl = document.getElementById('assignmentResultsList');
+        document.getElementById('assignmentResultsTitle').textContent = 'Đang tải...';
+        listEl.innerHTML = `<div class="list-group-item border-0 p-5 text-center text-muted"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tải kết quả...</div></div>`;
+        modal.show();
+
+        fetch(`/api/teacher/assignments/${assignmentId}/results`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    listEl.innerHTML = `<div class="list-group-item border-0 p-4 text-danger">${escapeHtml(data.message || 'Không tải được kết quả.')}</div>`;
+                    return;
+                }
+
+                const assignment = data.assignment;
+                const results = data.results || [];
+                const summary = data.summary || {};
+                const questionStats = data.question_stats || [];
+                document.getElementById('assignmentResultsTitle').textContent = `${assignment.title} • ${assignment.class_name}`;
+
+                if (!results.length) {
+                    listEl.innerHTML = '<div class="list-group-item border-0 p-5 text-center text-muted">Lớp chưa có sinh viên.</div>';
+                    return;
+                }
+
+                const summaryHtml = `
+                    <div class="list-group-item border-0 p-3 bg-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <div class="bg-primary-subtle text-primary rounded-3 p-3 h-100">
+                                    <div class="small fw-bold">Đã nộp</div>
+                                    <div class="fs-4 fw-bold">${summary.submitted_count || 0}/${summary.total_students || 0}</div>
+                                    <div class="small">${summary.submitted_rate || 0}%</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="bg-success-subtle text-success rounded-3 p-3 h-100">
+                                    <div class="small fw-bold">Điểm TB</div>
+                                    <div class="fs-4 fw-bold">${summary.average_score ?? 0}/10</div>
+                                    <div class="small">Tính trên bài đã nộp</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="bg-warning-subtle text-warning-emphasis rounded-3 p-3 h-100">
+                                    <div class="small fw-bold">Cao nhất</div>
+                                    <div class="fs-4 fw-bold">${summary.highest_score ?? '-'}</div>
+                                    <div class="small">Điểm tối đa 10</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="bg-danger-subtle text-danger rounded-3 p-3 h-100">
+                                    <div class="small fw-bold">Chưa nộp</div>
+                                    <div class="fs-4 fw-bold">${summary.missing_count || 0}</div>
+                                    <div class="small">Sinh viên</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+
+                const questionStatsHtml = questionStats.length ? `
+                    <div class="list-group-item border-0 p-3 bg-body">
+                        <h6 class="fw-bold text-primary mb-3"><i class="fa-solid fa-chart-column me-2"></i>Thống kê từng câu</h6>
+                        <div class="row g-2">
+                            ${questionStats.map((item) => `
+                                <div class="col-md-6">
+                                    <div class="border rounded-3 p-3 h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <strong>Câu ${item.question_number}</strong>
+                                            <span class="badge bg-success-subtle text-success border rounded-pill">${item.correct_rate}% đúng</span>
+                                        </div>
+                                        <div class="small text-muted mb-2">Đáp án đúng: <strong>${escapeHtml(item.correct_answer)}</strong> • Đúng ${item.correct_count}, sai/trống ${item.wrong_count}</div>
+                                        <div class="small d-flex flex-wrap gap-2">
+                                            <span>A: ${item.option_counts?.A || 0}</span>
+                                            <span>B: ${item.option_counts?.B || 0}</span>
+                                            <span>C: ${item.option_counts?.C || 0}</span>
+                                            <span>D: ${item.option_counts?.D || 0}</span>
+                                            <span>Trống: ${item.option_counts?.blank || 0}</span>
+                                        </div>
+                                    </div>
+                                </div>`).join('')}
+                        </div>
+                    </div>` : '';
+
+                const rowsHtml = results.map((row, index) => {
+                    const statusBadge = row.submitted
+                        ? `<span class="badge bg-success rounded-pill">Đã nộp</span>`
+                        : `<span class="badge bg-secondary rounded-pill">Chưa nộp</span>`;
+                    const scoreText = row.submitted
+                        ? `<strong>${row.score}/10</strong> <span class="text-muted">(${row.correct_count}/${row.total_questions})</span>`
+                        : '<span class="text-muted">-</span>';
+                    return `
+                        <div class="list-group-item border-0 border-bottom p-3 bg-body">
+                            <div class="d-flex align-items-center justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-bold text-body">${index + 1}. ${escapeHtml(row.username)}</div>
+                                    <div class="small text-muted">${row.submitted_at ? `Nộp lúc: ${escapeHtml(row.submitted_at)}` : 'Chưa có thời gian nộp'}</div>
+                                </div>
+                                <div class="text-end">
+                                    ${statusBadge}
+                                    <div class="mt-1">${scoreText}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                listEl.innerHTML = summaryHtml + questionStatsHtml + rowsHtml;
+            })
+            .catch(() => {
+                listEl.innerHTML = '<div class="list-group-item border-0 p-4 text-danger">Lỗi kết nối khi tải kết quả.</div>';
+            });
     }
 
     // ==============================================================
@@ -884,6 +1921,10 @@ document.addEventListener("DOMContentLoaded", function () {
     
     // 2. Gắn sự kiện khi click menu bên trái
     document.getElementById('nav-class-tab').addEventListener('click', resetWorkspaceLayout);
+    document.getElementById('nav-exam-bank-tab').addEventListener('click', function() {
+        resetWorkspaceLayout();
+        loadExamBankPage();
+    });
     document.getElementById('nav-exam-tab').addEventListener('click', function() {
         // Nếu click vào menu Sinh Đề, kiểm tra xem tab Tùy Chỉnh có đang mở không
         if (document.getElementById('custom-tab').classList.contains('active')) {
@@ -1486,6 +2527,8 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
     // Gộp đề 
     function generateBulkExam() {
         const title = document.getElementById('customExamTitle').value || "Đề thi Tùy chỉnh";
+        const weekNumber = document.getElementById('customExamWeek')?.value || '';
+        const topic = document.getElementById('customExamTopic')?.value || '';
         const btn = document.getElementById('btnGenerateBulk');
         const alertBox = document.getElementById('bulkSuccessAlert');
         const btnTex = document.getElementById('btnExportTex');
@@ -1497,16 +2540,23 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         fetch('/api/custom-exam/generate-bulk', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ exam_title: title, variants: window.generatedVariants })
+            body: JSON.stringify({ exam_title: title, week_number: weekNumber, topic: topic, variants: window.generatedVariants })
         })
             .then(res => res.json())
             .then(data => {
                 btn.innerHTML = '<i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất';
                 btn.disabled = false;
                 if (data.success) {
+                    const bankText = data.bank_exam
+                        ? ` Đã lưu vào ngân hàng đề thi: <strong>${escapeHtml(data.bank_exam.title)}</strong>.`
+                        : '';
+                    alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i>Đã chốt đề xong.${bankText} Bạn có thể xuất file hoặc giao từ ngân hàng đề.`;
                     alertBox.classList.remove('d-none');
                     btnTex.classList.remove('disabled');
                     btnPdf.classList.remove('disabled');
+                    if (document.getElementById('tab-exam-bank')?.classList.contains('active')) {
+                        loadExamBankPage();
+                    }
                 } else { alert(data.message); }
             });
     }

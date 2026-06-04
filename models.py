@@ -58,3 +58,55 @@ class ExamTemplate(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     teacher = db.relationship('User', backref=db.backref('exam_templates', lazy=True))
+
+class ExamBank(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    topic = db.Column(db.String(150))
+    week_number = db.Column(db.Integer)
+    description = db.Column(db.String(500))
+    variants_json = db.Column(db.Text, nullable=False)
+    combined_tex = db.Column(db.Text, nullable=False)
+    total_variants = db.Column(db.Integer, default=0)
+    total_questions = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    teacher = db.relationship('User', backref=db.backref('exam_bank_items', lazy=True))
+
+class Assignment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.String(500))
+    due_at = db.Column(db.DateTime)
+    content_tex = db.Column(db.Text, nullable=False)
+    questions_json = db.Column(db.Text, nullable=False)
+    answer_key_json = db.Column(db.Text, nullable=False)
+    total_questions = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    classroom = db.relationship('Class', backref=db.backref('assignments', lazy=True, cascade='all, delete-orphan'))
+    teacher = db.relationship('User', backref=db.backref('created_assignments', lazy=True))
+
+class Submission(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    answers_json = db.Column(db.Text, nullable=False)
+    correct_count = db.Column(db.Integer, default=0)
+    total_questions = db.Column(db.Integer, default=0)
+    score = db.Column(db.Float, default=0.0)
+    max_score = db.Column(db.Float, default=10.0)
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    assignment = db.relationship('Assignment', backref=db.backref('submissions', lazy=True, cascade='all, delete-orphan'))
+    student = db.relationship('User', backref=db.backref('submissions', lazy=True))
+
+    __table_args__ = (
+        db.UniqueConstraint('assignment_id', 'student_id', name='uq_submission_assignment_student'),
+    )

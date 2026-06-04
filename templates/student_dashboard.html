@@ -173,6 +173,24 @@
                     </div>
                 </div>
             </div>
+
+            <div class="tab-pane fade" id="tab-practice" role="tabpanel">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <div>
+                        <h4 class="fw-bold text-primary mb-1"><i class="fa-solid fa-clipboard-check me-2"></i>Bài tập được giao</h4>
+                        <p class="text-muted small mb-0">Các bài tập giáo viên đã giao cho lớp bạn tham gia.</p>
+                    </div>
+                    <button class="btn btn-sm btn-outline-primary fw-bold rounded-pill px-3" onclick="loadStudentAssignments()">
+                        <i class="fa-solid fa-rotate-right me-1"></i>Làm mới
+                    </button>
+                </div>
+                <div id="studentAssignmentList" class="row g-4">
+                    <div class="col-12 text-center py-5 bg-body rounded-4 shadow-sm">
+                        <i class="fa-solid fa-spinner fa-spin fs-2 text-primary mb-3"></i>
+                        <div class="text-muted">Đang tải bài tập...</div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -205,6 +223,40 @@
                         Xác nhận tham gia
                     </button>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="takeAssignmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1" id="takeAssignmentTitle">
+                        <i class="fa-solid fa-file-pen me-2"></i>Làm bài tập
+                    </h4>
+                    <p class="text-muted small mb-0" id="takeAssignmentMeta">Đang tải...</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="takeAssignmentAlert" class="alert d-none border-0 rounded-3 small"></div>
+                <form id="takeAssignmentForm" onsubmit="event.preventDefault(); submitStudentAssignment();">
+                    <input type="hidden" id="activeAssignmentId">
+                    <div id="takeAssignmentQuestions" class="d-flex flex-column gap-3">
+                        <div class="text-center text-muted py-5">
+                            <i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i>
+                            <div>Đang tải câu hỏi...</div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0">
+                <button type="button" class="btn btn-light rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" id="btnSubmitStudentAssignment" class="btn btn-primary rounded-pill px-5 fw-bold shadow-sm" onclick="submitStudentAssignment()">
+                    <i class="fa-solid fa-paper-plane me-2"></i>Nộp bài
+                </button>
             </div>
         </div>
     </div>
@@ -254,6 +306,200 @@
             const tab = new bootstrap.Tab(tabTriggerEl);
             tab.show();
         }
+
+        if (tabId === 'tab-practice') {
+            loadStudentAssignments();
+        }
+    }
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function loadStudentAssignments() {
+        const listEl = document.getElementById('studentAssignmentList');
+        if (!listEl) return;
+
+        listEl.innerHTML = `
+            <div class="col-12 text-center py-5 bg-body rounded-4 shadow-sm">
+                <i class="fa-solid fa-spinner fa-spin fs-2 text-primary mb-3"></i>
+                <div class="text-muted">Đang tải bài tập...</div>
+            </div>`;
+
+        fetch('/api/student/assignments')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    listEl.innerHTML = `<div class="col-12 alert alert-danger border-0 shadow-sm">${escapeHtml(data.message || 'Không tải được bài tập.')}</div>`;
+                    return;
+                }
+
+                const assignments = data.assignments || [];
+                if (!assignments.length) {
+                    listEl.innerHTML = `
+                        <div class="col-12 text-center py-5 bg-body rounded-4 shadow-sm">
+                            <i class="fa-solid fa-inbox fs-1 text-muted opacity-50 mb-3"></i>
+                            <h5 class="fw-bold text-body">Chưa có bài tập được giao</h5>
+                            <p class="text-muted small mb-0">Khi giáo viên giao bài, danh sách sẽ xuất hiện ở đây.</p>
+                        </div>`;
+                    return;
+                }
+
+                listEl.innerHTML = assignments.map((assignment) => {
+                    const submittedBadge = assignment.submitted
+                        ? `<span class="badge bg-success rounded-pill">Đã nộp</span>`
+                        : `<span class="badge bg-warning text-dark rounded-pill">Chưa nộp</span>`;
+                    const scoreText = assignment.submitted
+                        ? `<div class="fw-bold text-success mt-2">Điểm: ${assignment.score}/10 (${assignment.correct_count}/${assignment.total_questions})</div>`
+                        : `<div class="small text-muted mt-2">Số câu: ${assignment.total_questions}</div>`;
+                    const buttonText = assignment.submitted ? 'Xem bài đã nộp' : 'Làm bài';
+                    const dueText = assignment.due_at ? `Hạn: ${escapeHtml(assignment.due_at)}` : 'Không đặt hạn';
+
+                    return `
+                        <div class="col-md-6">
+                            <div class="card border-0 shadow-sm rounded-4 h-100 bg-body daymai-grid-card">
+                                <div class="card-body p-4 d-flex flex-column">
+                                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center flex-shrink-0" style="width: 50px; height: 50px;">
+                                            <i class="fa-solid fa-file-lines fs-4"></i>
+                                        </div>
+                                        ${submittedBadge}
+                                    </div>
+                                    <h5 class="fw-bold text-body mb-1">${escapeHtml(assignment.title)}</h5>
+                                    <div class="small text-muted mb-1">${escapeHtml(assignment.class_name)} • ${escapeHtml(assignment.class_code)}</div>
+                                    <div class="small text-muted">${dueText}</div>
+                                    ${assignment.description ? `<p class="text-muted small mt-3 mb-0">${escapeHtml(assignment.description)}</p>` : ''}
+                                    ${scoreText}
+                                    <button class="btn btn-outline-primary rounded-pill fw-bold w-100 mt-4" onclick="openStudentAssignment(${assignment.id})">
+                                        ${buttonText}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+            })
+            .catch(() => {
+                listEl.innerHTML = '<div class="col-12 alert alert-danger border-0 shadow-sm">Lỗi kết nối khi tải bài tập.</div>';
+            });
+    }
+
+    function showTakeAssignmentAlert(type, message) {
+        const alertEl = document.getElementById('takeAssignmentAlert');
+        alertEl.className = `alert alert-${type} border-0 rounded-3 small`;
+        alertEl.innerHTML = message;
+    }
+
+    function openStudentAssignment(assignmentId) {
+        const modal = new bootstrap.Modal(document.getElementById('takeAssignmentModal'));
+        document.getElementById('activeAssignmentId').value = assignmentId;
+        document.getElementById('takeAssignmentTitle').innerHTML = '<i class="fa-solid fa-file-pen me-2"></i>Làm bài tập';
+        document.getElementById('takeAssignmentMeta').textContent = 'Đang tải...';
+        document.getElementById('takeAssignmentAlert').className = 'alert d-none border-0 rounded-3 small';
+        document.getElementById('btnSubmitStudentAssignment').classList.remove('d-none');
+        document.getElementById('takeAssignmentQuestions').innerHTML = `
+            <div class="text-center text-muted py-5">
+                <i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i>
+                <div>Đang tải câu hỏi...</div>
+            </div>`;
+        modal.show();
+
+        fetch(`/api/student/assignments/${assignmentId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showTakeAssignmentAlert('danger', escapeHtml(data.message || 'Không tải được bài tập.'));
+                    return;
+                }
+
+                const assignment = data.assignment;
+                const submission = data.submission || {};
+                const questions = data.questions || [];
+                const submitted = Boolean(submission.submitted);
+                const submittedAnswers = submission.answers || {};
+
+                document.getElementById('takeAssignmentTitle').innerHTML = `<i class="fa-solid fa-file-pen me-2"></i>${escapeHtml(assignment.title)}`;
+                document.getElementById('takeAssignmentMeta').textContent = `${assignment.class_name} • ${assignment.total_questions} câu`;
+
+                if (submitted) {
+                    document.getElementById('btnSubmitStudentAssignment').classList.add('d-none');
+                    showTakeAssignmentAlert('success', `Bạn đã nộp bài này. Điểm: <strong>${submission.score}/10</strong> (${submission.correct_count}/${assignment.total_questions}).`);
+                }
+
+                document.getElementById('takeAssignmentQuestions').innerHTML = questions.map((question, qIndex) => {
+                    const choicesHtml = question.choices.map((choice) => {
+                        const inputId = `assignment-${assignment.id}-q${qIndex}-${choice.letter}`;
+                        const checked = submittedAnswers[String(qIndex)] === choice.letter ? 'checked' : '';
+                        const disabled = submitted ? 'disabled' : '';
+                        return `
+                            <label class="list-group-item border-0 border-bottom bg-body d-flex gap-2 align-items-start py-3" for="${inputId}">
+                                <input class="form-check-input mt-1" type="radio" name="question-${qIndex}" id="${inputId}" value="${choice.letter}" ${checked} ${disabled}>
+                                <span><strong>${choice.letter}.</strong> ${escapeHtml(choice.content)}</span>
+                            </label>`;
+                    }).join('');
+
+                    return `
+                        <div class="card border-0 shadow-sm rounded-4 bg-body">
+                            <div class="card-body p-4">
+                                <div class="fw-bold text-primary mb-2">Câu ${qIndex + 1}</div>
+                                <div class="mb-3" style="white-space: pre-line;">${escapeHtml(question.prompt)}</div>
+                                <div class="list-group rounded-4 overflow-hidden border">
+                                    ${choicesHtml}
+                                </div>
+                            </div>
+                        </div>`;
+                }).join('');
+
+                if (window.MathJax) MathJax.typesetPromise();
+            })
+            .catch(() => showTakeAssignmentAlert('danger', 'Lỗi kết nối khi tải bài tập.'));
+    }
+
+    function submitStudentAssignment() {
+        const assignmentId = document.getElementById('activeAssignmentId').value;
+        const questionCards = document.querySelectorAll('#takeAssignmentQuestions .card');
+        const answers = {};
+
+        questionCards.forEach((card, qIndex) => {
+            const selected = card.querySelector(`input[name="question-${qIndex}"]:checked`);
+            answers[String(qIndex)] = selected ? selected.value : '';
+        });
+
+        const unanswered = Object.values(answers).filter(value => !value).length;
+        if (unanswered > 0 && !confirm(`Bạn còn ${unanswered} câu chưa chọn đáp án. Vẫn nộp bài?`)) {
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitStudentAssignment');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang nộp...';
+
+        fetch(`/api/student/assignments/${assignmentId}/submit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ answers })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    showTakeAssignmentAlert('danger', escapeHtml(data.message || 'Không nộp được bài.'));
+                    return;
+                }
+                showTakeAssignmentAlert('success', `Đã nộp bài. Điểm: <strong>${data.score}/10</strong> (${data.correct_count}/${data.total_questions}).`);
+                btn.classList.add('d-none');
+                document.querySelectorAll('#takeAssignmentQuestions input[type="radio"]').forEach(input => input.disabled = true);
+                loadStudentAssignments();
+            })
+            .catch(() => showTakeAssignmentAlert('danger', 'Lỗi kết nối khi nộp bài.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
     }
 
     function joinClassAjax() {
@@ -289,6 +535,8 @@
                 errorAlert.classList.remove('d-none');
             });
     }
+
+    document.addEventListener('DOMContentLoaded', loadStudentAssignments);
 </script>
 
 {% endblock %}

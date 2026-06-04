@@ -1,7 +1,8 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file,abort
-from models import db, User, Badge, Class, ExamTemplate
+from models import db, User, Badge, Class, ExamTemplate, ExamBank, Assignment, Submission
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import inspect
 import sympy as sp
 import random
 import os
@@ -10,6 +11,8 @@ import tempfile
 import io
 import re
 import numpy as np
+import json
+from datetime import datetime
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mot_chuoi_bi_mat_cuc_ky_kho_doan'
@@ -572,8 +575,150 @@ def review_question_content(question_content):
         'mode': 'rule'
     }
 
+
+def extract_balanced_latex_commands(text, command_names):
+    names = '|'.join(re.escape(name) for name in command_names)
+    command_pattern = re.compile(rf'\\({names})\s*\{{')
+    items = []
+
+    for match in command_pattern.finditer(text):
+        command = match.group(1)
+        start = match.end()
+        depth = 1
+        idx = start
+        while idx < len(text) and depth > 0:
+            char = text[idx]
+            prev = text[idx - 1] if idx > 0 else ''
+            if char == '{' and prev != '\\':
+                depth += 1
+            elif char == '}' and prev != '\\':
+                depth -= 1
+            idx += 1
+
+        if depth == 0:
+            items.append({
+                'command': command,
+                'body': text[start:idx - 1].strip(),
+                'start': match.start(),
+                'end': idx
+            })
+
+    return items
+
+
+def remove_latex_spans(text, spans):
+    for start, end in sorted(spans, reverse=True):
+        text = text[:start] + text[end:]
+    return text
+
+
+def clean_online_latex_fragment(text):
+    text = str(text or '').strip()
+    text = re.sub(r'\\begin\{solution\}[\s\S]*?\\end\{solution\}', '', text)
+    text = re.sub(r'\\DatCot\[\d+\]', '', text)
+    text = re.sub(r'\\par\s*\\vspace\*?\{[^{}]*\}', '\n', text)
+    text = re.sub(r'\\vspace\*?\{[^{}]*\}', '\n', text)
+    text = re.sub(r'\\(?:smallskip|medskip|bigskip)\b', '\n', text)
+    text = re.sub(r'\\par\b', '\n', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def parse_assignment_questions(tex_content):
+    questions = []
+    answer_key = []
+    question_blocks = re.findall(r'\\begin\{question\}([\s\S]*?)\\end\{question\}', str(tex_content or ''))
+
+    if not question_blocks:
+        return [], []
+
+    for q_index, block in enumerate(question_blocks, start=1):
+        block_without_solution = re.sub(r'\\begin\{solution\}[\s\S]*?\\end\{solution\}', '', block)
+        choices = extract_balanced_latex_commands(block_without_solution, ['Dung', 'Sai'])
+        if not choices:
+            continue
+
+        prompt = remove_latex_spans(block_without_solution, [(item['start'], item['end']) for item in choices])
+        prompt = clean_online_latex_fragment(prompt)
+
+        online_choices = []
+        correct_choice = None
+        for choice_idx, choice in enumerate(choices):
+            letter = chr(65 + choice_idx)
+            online_choices.append({
+                'letter': letter,
+                'content': clean_online_latex_fragment(choice['body'])
+            })
+            if choice['command'] == 'Dung':
+                correct_choice = letter
+
+        if prompt and len(online_choices) >= 2 and correct_choice:
+            questions.append({
+                'number': q_index,
+                'prompt': prompt,
+                'choices': online_choices
+            })
+            answer_key.append(correct_choice)
+
+    return questions, answer_key
+
+
+def serialize_assignment_summary(assignment, include_class=False, student_id=None):
+    submission = None
+    if student_id:
+        submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=student_id).first()
+
+    data = {
+        'id': assignment.id,
+        'title': assignment.title,
+        'description': assignment.description or '',
+        'class_id': assignment.class_id,
+        'total_questions': assignment.total_questions,
+        'due_at': assignment.due_at.strftime('%Y-%m-%d %H:%M') if assignment.due_at else '',
+        'created_at': assignment.created_at.strftime('%Y-%m-%d %H:%M') if assignment.created_at else '',
+        'is_active': assignment.is_active,
+        'submission_count': len(assignment.submissions),
+        'submitted': bool(submission),
+        'score': submission.score if submission else None,
+        'correct_count': submission.correct_count if submission else None
+    }
+
+    if include_class:
+        data['class_name'] = assignment.classroom.name if assignment.classroom else ''
+        data['class_code'] = assignment.classroom.code if assignment.classroom else ''
+
+    return data
+
+
+def parse_due_at(raw_value):
+    raw_value = str(raw_value or '').strip()
+    if not raw_value:
+        return None
+
+    for fmt in ['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M']:
+        try:
+            return datetime.strptime(raw_value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def ensure_exam_bank_schema():
+    inspector = inspect(db.engine)
+    if 'exam_bank' not in inspector.get_table_names():
+        return
+
+    existing_columns = {column['name'] for column in inspector.get_columns('exam_bank')}
+    with db.engine.begin() as connection:
+        if 'topic' not in existing_columns:
+            connection.exec_driver_sql('ALTER TABLE exam_bank ADD COLUMN topic VARCHAR(150)')
+        if 'week_number' not in existing_columns:
+            connection.exec_driver_sql('ALTER TABLE exam_bank ADD COLUMN week_number INTEGER')
+
+
 with app.app_context():
     db.create_all()
+    ensure_exam_bank_schema()
     
     # Khởi tạo huy hiệu mặc định nếu chưa có
     if not Badge.query.first():
@@ -1114,6 +1259,516 @@ def student_join_class():
         return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
 
 
+def serialize_exam_bank_item(item, include_variants=False):
+    data = {
+        'id': item.id,
+        'title': item.title,
+        'topic': item.topic or '',
+        'week_number': item.week_number,
+        'description': item.description or '',
+        'total_variants': item.total_variants,
+        'total_questions': item.total_questions,
+        'created_at': item.created_at.strftime('%Y-%m-%d %H:%M') if item.created_at else '',
+        'updated_at': item.updated_at.strftime('%Y-%m-%d %H:%M') if item.updated_at else ''
+    }
+    if include_variants:
+        try:
+            data['variants'] = json.loads(item.variants_json or '[]')
+        except json.JSONDecodeError:
+            data['variants'] = []
+    return data
+
+
+@app.route('/api/exam-bank', methods=['GET'])
+@login_required
+def api_exam_bank_list():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    items = (
+        ExamBank.query
+        .filter_by(teacher_id=current_user.id)
+        .order_by(ExamBank.created_at.desc(), ExamBank.id.desc())
+        .all()
+    )
+    return jsonify({
+        'success': True,
+        'exams': [serialize_exam_bank_item(item) for item in items]
+    })
+
+
+@app.route('/api/exam-bank/<int:exam_id>', methods=['GET'])
+@login_required
+def api_exam_bank_detail(exam_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first()
+    if not item:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề trong ngân hàng.'}), 404
+
+    return jsonify({
+        'success': True,
+        'exam': serialize_exam_bank_item(item, include_variants=True)
+    })
+
+
+@app.route('/api/exam-bank/<int:exam_id>', methods=['PUT'])
+@login_required
+def api_exam_bank_update(exam_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first()
+    if not item:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề trong ngân hàng.'}), 404
+
+    data = request.get_json() or {}
+    title = str(data.get('title') or '').strip()
+    topic = str(data.get('topic') or '').strip()
+    description = str(data.get('description') or '').strip()
+    week_raw = str(data.get('week_number') or '').strip()
+
+    if not title:
+        return jsonify({'success': False, 'message': 'Vui lòng nhập tên đề.'})
+
+    week_number = None
+    if week_raw:
+        try:
+            week_number = int(week_raw)
+            if week_number < 1:
+                return jsonify({'success': False, 'message': 'Tuần phải là số nguyên dương.'})
+        except ValueError:
+            return jsonify({'success': False, 'message': 'Tuần phải là số nguyên.'})
+
+    item.title = title
+    item.topic = topic
+    item.description = description
+    item.week_number = week_number
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã cập nhật thông tin đề.',
+        'exam': serialize_exam_bank_item(item, include_variants=True)
+    })
+
+
+@app.route('/api/exam-bank/<int:exam_id>', methods=['DELETE'])
+@login_required
+def api_exam_bank_delete(exam_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first()
+    if not item:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề trong ngân hàng.'}), 404
+
+    db.session.delete(item)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã xóa đề khỏi ngân hàng.'
+    })
+
+
+def get_exam_bank_variant(item, variant_index):
+    try:
+        variants = json.loads(item.variants_json or '[]')
+    except json.JSONDecodeError:
+        variants = []
+
+    if variant_index < 0 or variant_index >= len(variants):
+        return None
+
+    variant = variants[variant_index]
+    if not isinstance(variant, dict) or not str(variant.get('content') or '').strip():
+        return None
+    return variant
+
+
+def send_tex_download(tex_content, filename):
+    return Response(
+        tex_content,
+        mimetype='text/plain',
+        headers={'Content-disposition': f'attachment; filename={filename}'}
+    )
+
+
+def send_pdf_download(tex_content, filename):
+    import tempfile
+    import subprocess
+    import io
+    import shutil
+
+    pdf_memory = None
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        tex_file_path = os.path.join(tempdir, 'exam.tex')
+        pdf_file_path = os.path.join(tempdir, 'exam.pdf')
+
+        with open(tex_file_path, 'w', encoding='utf-8') as f:
+            f.write(tex_content)
+
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        cls_path_source = os.path.join(basedir, 'fami-exam.cls')
+        if os.path.exists(cls_path_source):
+            shutil.copy(cls_path_source, tempdir)
+
+        try:
+            process = subprocess.run(
+                ['pdflatex', '-interaction=nonstopmode', 'exam.tex'],
+                cwd=tempdir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            if process.returncode != 0:
+                print('\n=== LATEX COMPILE ERROR ===')
+                print('\n'.join(process.stdout.split('\n')[-20:]))
+                print('===========================\n')
+                flash('Có lỗi cú pháp LaTeX khi xuất PDF từ ngân hàng đề.', 'danger')
+                return redirect(url_for('teacher_dashboard'))
+
+            with open(pdf_file_path, 'rb') as f:
+                pdf_memory = io.BytesIO(f.read())
+        except Exception as e:
+            print('Lỗi hệ thống khi gọi pdflatex:', str(e))
+            flash('Không thể gọi pdflatex. Hãy kiểm tra MiKTeX và biến môi trường PATH.', 'danger')
+            return redirect(url_for('teacher_dashboard'))
+
+    if not pdf_memory:
+        flash('Lỗi đọc file PDF.', 'danger')
+        return redirect(url_for('teacher_dashboard'))
+
+    pdf_memory.seek(0)
+    return send_file(pdf_memory, as_attachment=True, download_name=filename, mimetype='application/pdf')
+
+
+@app.route('/download/exam-bank/<int:exam_id>/tex')
+@login_required
+def download_exam_bank_tex(exam_id):
+    if current_user.role != 'teacher':
+        return redirect(url_for('teacher_dashboard'))
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first_or_404()
+    return send_tex_download(item.combined_tex, f'exam_bank_{item.id}.tex')
+
+
+@app.route('/download/exam-bank/<int:exam_id>/pdf')
+@login_required
+def download_exam_bank_pdf(exam_id):
+    if current_user.role != 'teacher':
+        return redirect(url_for('teacher_dashboard'))
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first_or_404()
+    return send_pdf_download(item.combined_tex, f'exam_bank_{item.id}.pdf')
+
+
+@app.route('/download/exam-bank/<int:exam_id>/variant/<int:variant_index>/tex')
+@login_required
+def download_exam_bank_variant_tex(exam_id, variant_index):
+    if current_user.role != 'teacher':
+        return redirect(url_for('teacher_dashboard'))
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first_or_404()
+    variant = get_exam_bank_variant(item, variant_index)
+    if not variant:
+        abort(404)
+
+    seed = re.sub(r'[^a-zA-Z0-9_-]+', '_', str(variant.get('seed', variant_index + 1)))
+    return send_tex_download(variant['content'], f'exam_bank_{item.id}_seed_{seed}.tex')
+
+
+@app.route('/download/exam-bank/<int:exam_id>/variant/<int:variant_index>/pdf')
+@login_required
+def download_exam_bank_variant_pdf(exam_id, variant_index):
+    if current_user.role != 'teacher':
+        return redirect(url_for('teacher_dashboard'))
+
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first_or_404()
+    variant = get_exam_bank_variant(item, variant_index)
+    if not variant:
+        abort(404)
+
+    seed = re.sub(r'[^a-zA-Z0-9_-]+', '_', str(variant.get('seed', variant_index + 1)))
+    return send_pdf_download(variant['content'], f'exam_bank_{item.id}_seed_{seed}.pdf')
+
+
+@app.route('/api/teacher/assignments', methods=['POST'])
+@login_required
+def api_teacher_create_assignment():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    data = request.get_json() or {}
+    class_id = data.get('class_id')
+    class_ids = data.get('class_ids')
+    title = str(data.get('title') or '').strip()
+    description = str(data.get('description') or '').strip()
+    content_tex = str(data.get('content_tex') or '').strip()
+    due_at = parse_due_at(data.get('due_at'))
+
+    if class_ids is None:
+        class_ids = [class_id] if class_id else []
+    if not isinstance(class_ids, list):
+        class_ids = [class_ids]
+
+    normalized_class_ids = []
+    for raw_id in class_ids:
+        try:
+            parsed_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if parsed_id not in normalized_class_ids:
+            normalized_class_ids.append(parsed_id)
+
+    if not normalized_class_ids:
+        return jsonify({'success': False, 'message': 'Vui lòng chọn lớp để giao bài.'})
+    if not title:
+        return jsonify({'success': False, 'message': 'Vui lòng nhập tiêu đề bài tập.'})
+    if not content_tex:
+        return jsonify({'success': False, 'message': 'Chưa có đề để giao. Hãy bấm Xem trước trong phần sinh đề tùy chỉnh trước.'})
+
+    target_classes = Class.query.filter(Class.id.in_(normalized_class_ids)).all()
+    if len(target_classes) != len(normalized_class_ids):
+        return jsonify({'success': False, 'message': 'Có lớp không tồn tại hoặc đã bị xóa.'}), 404
+    if any(target_class.teacher_id != current_user.id for target_class in target_classes):
+        return jsonify({'success': False, 'message': 'Bạn không có quyền giao bài cho một hoặc nhiều lớp đã chọn.'}), 403
+
+    questions, answer_key = parse_assignment_questions(content_tex)
+    if not questions or not answer_key:
+        return jsonify({
+            'success': False,
+            'message': 'Không tách được câu hỏi trắc nghiệm từ đề này. Hãy kiểm tra đề đã có \\AutoText hoặc \\Dung/\\Sai chưa.'
+        })
+
+    assignments = []
+    for target_class in target_classes:
+        assignment = Assignment(
+            class_id=target_class.id,
+            teacher_id=current_user.id,
+            title=title,
+            description=description,
+            due_at=due_at,
+            content_tex=content_tex,
+            questions_json=json.dumps(questions, ensure_ascii=False),
+            answer_key_json=json.dumps(answer_key, ensure_ascii=False),
+            total_questions=len(questions),
+            is_active=True
+        )
+        db.session.add(assignment)
+        assignments.append(assignment)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã giao bài tập cho lớp.',
+        'assignment': serialize_assignment_summary(assignments[0]) if assignments else None,
+        'assignments': [serialize_assignment_summary(item, include_class=True) for item in assignments]
+    })
+
+
+@app.route('/api/teacher/class/<int:class_id>/assignments', methods=['GET'])
+@login_required
+def api_teacher_class_assignments(class_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    target_class = Class.query.get_or_404(class_id)
+    if target_class.teacher_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Bạn không có quyền xem lớp này.'}), 403
+
+    assignments = (
+        Assignment.query
+        .filter_by(class_id=class_id, teacher_id=current_user.id)
+        .order_by(Assignment.created_at.desc(), Assignment.id.desc())
+        .all()
+    )
+
+    return jsonify({
+        'success': True,
+        'assignments': [serialize_assignment_summary(item) for item in assignments]
+    })
+
+
+@app.route('/api/teacher/assignments/<int:assignment_id>/results', methods=['GET'])
+@login_required
+def api_teacher_assignment_results(assignment_id):
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
+    assignment = Assignment.query.get_or_404(assignment_id)
+    if assignment.teacher_id != current_user.id:
+        return jsonify({'success': False, 'message': 'Bạn không có quyền xem kết quả bài này.'}), 403
+
+    submissions_by_student = {submission.student_id: submission for submission in assignment.submissions}
+    answer_key = json.loads(assignment.answer_key_json or '[]')
+    submitted_submissions = list(submissions_by_student.values())
+    total_students = len(assignment.classroom.students)
+    submitted_count = len(submitted_submissions)
+    scores = [submission.score for submission in submitted_submissions]
+    average_score = round(sum(scores) / len(scores), 2) if scores else 0
+    question_stats = []
+    for idx, correct_letter in enumerate(answer_key):
+        option_counts = {'A': 0, 'B': 0, 'C': 0, 'D': 0, 'blank': 0}
+        for submission in submitted_submissions:
+            answers = json.loads(submission.answers_json or '{}')
+            selected = str(answers.get(str(idx)) or '').strip().upper()
+            if selected in {'A', 'B', 'C', 'D'}:
+                option_counts[selected] += 1
+            else:
+                option_counts['blank'] += 1
+        correct_count = option_counts.get(correct_letter, 0)
+        question_stats.append({
+            'question_number': idx + 1,
+            'correct_answer': correct_letter,
+            'correct_count': correct_count,
+            'wrong_count': submitted_count - correct_count,
+            'correct_rate': round((correct_count / submitted_count) * 100, 1) if submitted_count else 0,
+            'option_counts': option_counts
+        })
+    rows = []
+    for student in assignment.classroom.students:
+        submission = submissions_by_student.get(student.id)
+        rows.append({
+            'student_id': student.id,
+            'username': student.username,
+            'submitted': bool(submission),
+            'score': submission.score if submission else None,
+            'correct_count': submission.correct_count if submission else None,
+            'total_questions': assignment.total_questions,
+            'answers': json.loads(submission.answers_json or '{}') if submission else {},
+            'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission else ''
+        })
+
+    return jsonify({
+        'success': True,
+        'assignment': serialize_assignment_summary(assignment, include_class=True),
+        'summary': {
+            'total_students': total_students,
+            'submitted_count': submitted_count,
+            'missing_count': max(total_students - submitted_count, 0),
+            'submitted_rate': round((submitted_count / total_students) * 100, 1) if total_students else 0,
+            'average_score': average_score,
+            'highest_score': max(scores) if scores else None,
+            'lowest_score': min(scores) if scores else None
+        },
+        'question_stats': question_stats,
+        'results': rows
+    })
+
+
+@app.route('/api/student/assignments', methods=['GET'])
+@login_required
+def api_student_assignments():
+    if current_user.role != 'student':
+        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới xem được danh sách bài tập.'})
+
+    class_ids = [item.id for item in current_user.enrolled_classes]
+    if not class_ids:
+        return jsonify({'success': True, 'assignments': []})
+
+    assignments = (
+        Assignment.query
+        .filter(Assignment.class_id.in_(class_ids), Assignment.is_active.is_(True))
+        .order_by(Assignment.created_at.desc(), Assignment.id.desc())
+        .all()
+    )
+
+    return jsonify({
+        'success': True,
+        'assignments': [
+            serialize_assignment_summary(item, include_class=True, student_id=current_user.id)
+            for item in assignments
+        ]
+    })
+
+
+@app.route('/api/student/assignments/<int:assignment_id>', methods=['GET'])
+@login_required
+def api_student_assignment_detail(assignment_id):
+    if current_user.role != 'student':
+        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới xem được bài tập.'})
+
+    assignment = Assignment.query.get_or_404(assignment_id)
+    enrolled_class_ids = [item.id for item in current_user.enrolled_classes]
+    if assignment.class_id not in enrolled_class_ids:
+        return jsonify({'success': False, 'message': 'Bạn không thuộc lớp được giao bài này.'}), 403
+
+    submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=current_user.id).first()
+    questions = json.loads(assignment.questions_json or '[]')
+
+    return jsonify({
+        'success': True,
+        'assignment': serialize_assignment_summary(assignment, include_class=True, student_id=current_user.id),
+        'questions': questions,
+        'submission': {
+            'submitted': bool(submission),
+            'answers': json.loads(submission.answers_json) if submission else {},
+            'score': submission.score if submission else None,
+            'correct_count': submission.correct_count if submission else None,
+            'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission else ''
+        }
+    })
+
+
+@app.route('/api/student/assignments/<int:assignment_id>/submit', methods=['POST'])
+@login_required
+def api_student_submit_assignment(assignment_id):
+    if current_user.role != 'student':
+        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới nộp được bài.'})
+
+    assignment = Assignment.query.get_or_404(assignment_id)
+    enrolled_class_ids = [item.id for item in current_user.enrolled_classes]
+    if assignment.class_id not in enrolled_class_ids:
+        return jsonify({'success': False, 'message': 'Bạn không thuộc lớp được giao bài này.'}), 403
+
+    existing_submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=current_user.id).first()
+    if existing_submission:
+        return jsonify({'success': False, 'message': 'Bạn đã nộp bài này rồi.'})
+
+    data = request.get_json() or {}
+    answers = data.get('answers', {})
+    if not isinstance(answers, dict):
+        return jsonify({'success': False, 'message': 'Dữ liệu đáp án không hợp lệ.'})
+
+    answer_key = json.loads(assignment.answer_key_json or '[]')
+    normalized_answers = {}
+    correct_count = 0
+    for idx, correct_letter in enumerate(answer_key):
+        selected = str(answers.get(str(idx)) or answers.get(idx) or '').strip().upper()
+        if selected not in {'A', 'B', 'C', 'D'}:
+            selected = ''
+        normalized_answers[str(idx)] = selected
+        if selected and selected == correct_letter:
+            correct_count += 1
+
+    total = len(answer_key)
+    score = round((correct_count / total) * 10, 2) if total else 0
+
+    submission = Submission(
+        assignment_id=assignment.id,
+        student_id=current_user.id,
+        answers_json=json.dumps(normalized_answers, ensure_ascii=False),
+        correct_count=correct_count,
+        total_questions=total,
+        score=score,
+        max_score=10.0
+    )
+    db.session.add(submission)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': 'Đã nộp bài.',
+        'score': score,
+        'correct_count': correct_count,
+        'total_questions': total
+    })
+
+
 def serialize_exam_template(template, include_content=False):
     data = {
         'id': template.id,
@@ -1380,14 +2035,46 @@ def api_check_questions_ai():
 @app.route('/api/custom-exam/generate-bulk', methods=['POST'])
 @login_required
 def custom_exam_generate_bulk():
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
+
     data = request.get_json()
     if not data or 'variants' not in data:
         return jsonify({'success': False, 'message': 'Không có dữ liệu!'})
 
-    variants = data['variants']
+    raw_variants = data['variants']
+    if not isinstance(raw_variants, list) or not raw_variants:
+        return jsonify({'success': False, 'message': 'Danh sách mã đề đang rỗng.'})
+
+    variants = []
+    for item in raw_variants[:100]:
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get('content') or '').strip()
+        if not content:
+            continue
+        variants.append({
+            'seed': item.get('seed', len(variants) + 1),
+            'content': content
+        })
+
+    if not variants:
+        return jsonify({'success': False, 'message': 'Không có nội dung đề hợp lệ để chốt.'})
+
     tex_content = ""
     preamble = ""
     body_content = ""
+    title = str(data.get('exam_title') or 'Đề thi Tùy chỉnh').strip() or 'Đề thi Tùy chỉnh'
+    topic = str(data.get('topic') or '').strip()
+    week_raw = str(data.get('week_number') or '').strip()
+    week_number = None
+    if week_raw:
+        try:
+            week_number = int(week_raw)
+            if week_number < 1:
+                week_number = None
+        except ValueError:
+            week_number = None
 
     for idx, v in enumerate(variants):
         content = str(v['content']).replace('\\(', '$').replace('\\)', '$')
@@ -1402,7 +2089,6 @@ def custom_exam_generate_bulk():
             body_content += match.group(1).strip() + "\n\\newpage\n"
         else:
             # Fallback an toàn nếu template quên mất \begin{document}
-            title = data.get('exam_title', 'Đề thi Tùy chỉnh')
             if idx == 0:
                 preamble = f"\\documentclass[12pt, a4paper]{{article}}\n\\usepackage[utf8]{{vietnam}}\n\\usepackage{{amsmath}}\n\\begin{{document}}\n\\begin{{center}}\\Large\\textbf{{{title}}}\\end{{center}}\n\n"
             
@@ -1414,9 +2100,32 @@ def custom_exam_generate_bulk():
     if preamble:
         tex_content = preamble + body_content + "\\end{document}"
 
+    total_questions = 0
+    if variants:
+        parsed_questions, _ = parse_assignment_questions(variants[0]['content'])
+        total_questions = len(parsed_questions)
+
+    bank_item = ExamBank(
+        teacher_id=current_user.id,
+        title=title,
+        topic=topic,
+        week_number=week_number,
+        description=f'Lưu tự động khi chốt đề. Số mã đề: {len(variants)}.',
+        variants_json=json.dumps(variants, ensure_ascii=False),
+        combined_tex=tex_content,
+        total_variants=len(variants),
+        total_questions=total_questions
+    )
+    db.session.add(bank_item)
+    db.session.commit()
+
     session['current_exam_tex'] = tex_content
     session.modified = True
-    return jsonify({'success': True})
+    return jsonify({
+        'success': True,
+        'bank_exam': serialize_exam_bank_item(bank_item),
+        'message': 'Đã chốt đề và lưu vào ngân hàng đề thi.'
+    })
 
 # API: Tải file mẫu (.cls, .tex)
 @app.route('/download/sample/<filename>')
