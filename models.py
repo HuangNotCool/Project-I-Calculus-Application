@@ -81,7 +81,14 @@ class Assignment(db.Model):
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.String(500))
+    opens_at = db.Column(db.DateTime)
     due_at = db.Column(db.DateTime)
+    duration_minutes = db.Column(db.Integer)
+    allow_retry = db.Column(db.Boolean, default=False)
+    score_policy = db.Column(db.String(20), default='latest')
+    shuffle_questions = db.Column(db.Boolean, default=False)
+    shuffle_answers = db.Column(db.Boolean, default=False)
+    version_hash = db.Column(db.String(64))
     content_tex = db.Column(db.Text, nullable=False)
     questions_json = db.Column(db.Text, nullable=False)
     answer_key_json = db.Column(db.Text, nullable=False)
@@ -93,6 +100,30 @@ class Assignment(db.Model):
     classroom = db.relationship('Class', backref=db.backref('assignments', lazy=True, cascade='all, delete-orphan'))
     teacher = db.relationship('User', backref=db.backref('created_assignments', lazy=True))
 
+
+class AssignmentAttempt(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    attempt_number = db.Column(db.Integer, default=1)
+    questions_json = db.Column(db.Text, nullable=False)
+    answer_key_json = db.Column(db.Text, nullable=False)
+    answers_json = db.Column(db.Text, default='{}', nullable=False)
+    started_at = db.Column(db.DateTime, default=datetime.now)
+    expires_at = db.Column(db.DateTime)
+    last_saved_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    is_completed = db.Column(db.Boolean, default=False)
+    completion_reason = db.Column(db.String(30))
+    correct_count = db.Column(db.Integer, default=0)
+    total_questions = db.Column(db.Integer, default=0)
+    score = db.Column(db.Float, default=0.0)
+    max_score = db.Column(db.Float, default=10.0)
+
+    assignment = db.relationship('Assignment', backref=db.backref('attempts', lazy=True, cascade='all, delete-orphan'))
+    student = db.relationship('User', backref=db.backref('assignment_attempts', lazy=True))
+
+
 class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     assignment_id = db.Column(db.Integer, db.ForeignKey('assignment.id'), nullable=False)
@@ -102,6 +133,7 @@ class Submission(db.Model):
     total_questions = db.Column(db.Integer, default=0)
     score = db.Column(db.Float, default=0.0)
     max_score = db.Column(db.Float, default=10.0)
+    selected_attempt_id = db.Column(db.Integer)
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     assignment = db.relationship('Assignment', backref=db.backref('submissions', lazy=True, cascade='all, delete-orphan'))
@@ -109,4 +141,22 @@ class Submission(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('assignment_id', 'student_id', name='uq_submission_assignment_student'),
+    )
+
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.String(500), nullable=False)
+    category = db.Column(db.String(30), default='info')
+    link = db.Column(db.String(250))
+    dedupe_key = db.Column(db.String(200))
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref=db.backref('notifications', lazy=True, cascade='all, delete-orphan'))
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'dedupe_key', name='uq_notification_user_key'),
     )

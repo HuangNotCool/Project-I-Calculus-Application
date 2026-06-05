@@ -508,9 +508,44 @@
                                     <select id="assignBankVariantSelect" class="form-select bg-body border-0 rounded-3 py-2"></select>
                                     <small class="text-muted d-block mt-1">Ngân hàng được tạo khi bấm Chốt Đề & Chuẩn Bị Xuất.</small>
                                 </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">Hạn nộp</label>
-                                    <input type="datetime-local" id="assignDueAt" class="form-control bg-body border-0 rounded-3 py-2">
+                                <div class="row g-3 mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Mở đề lúc</label>
+                                        <input type="datetime-local" id="assignOpensAt" class="form-control bg-body border-0 rounded-3 py-2">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Đóng đề lúc</label>
+                                        <input type="datetime-local" id="assignDueAt" class="form-control bg-body border-0 rounded-3 py-2">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Thời lượng làm bài</label>
+                                        <div class="input-group">
+                                            <input type="number" min="1" id="assignDurationMinutes" class="form-control bg-body border-0 rounded-start-3 py-2" placeholder="Không giới hạn">
+                                            <span class="input-group-text bg-body border-0">phút</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Cách ghi nhận điểm khi làm lại</label>
+                                        <select id="assignScorePolicy" class="form-select bg-body border-0 rounded-3 py-2">
+                                            <option value="latest">Lượt cuối cùng</option>
+                                            <option value="highest">Lượt có điểm cao nhất</option>
+                                            <option value="first">Lượt đầu tiên</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="bg-body rounded-3 p-3 mb-3">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="assignAllowRetry">
+                                        <label class="form-check-label fw-bold" for="assignAllowRetry">Cho phép làm lại</label>
+                                    </div>
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" id="assignShuffleQuestions">
+                                        <label class="form-check-label fw-bold" for="assignShuffleQuestions">Trộn thứ tự câu hỏi</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="assignShuffleAnswers">
+                                        <label class="form-check-label fw-bold" for="assignShuffleAnswers">Trộn thứ tự đáp án</label>
+                                    </div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-bold">Ghi chú</label>
@@ -585,6 +620,90 @@
     </div>
 </div>
 
+<div class="modal fade" id="manageAssignmentModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-sliders me-2"></i>Quản lý bài đã giao</h4>
+                    <p class="text-muted small mb-0">Đóng/mở, đổi thời gian, cấu hình làm lại hoặc thu hồi bài.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="manageAssignmentId">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Tiêu đề</label>
+                        <input type="text" id="manageAssignmentTitle" class="form-control bg-body-tertiary border-0 rounded-3 py-2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Mở đề lúc</label>
+                        <input type="datetime-local" id="manageAssignmentOpensAt" class="form-control bg-body-tertiary border-0 rounded-3 py-2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Đóng đề lúc</label>
+                        <input type="datetime-local" id="manageAssignmentDueAt" class="form-control bg-body-tertiary border-0 rounded-3 py-2">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Thời lượng</label>
+                        <div class="input-group">
+                            <input type="number" min="1" id="manageAssignmentDuration" class="form-control bg-body-tertiary border-0" placeholder="Không giới hạn">
+                            <span class="input-group-text bg-body-tertiary border-0">phút</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Trạng thái</label>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="manageAssignmentActive">
+                            <label class="form-check-label fw-bold" for="manageAssignmentActive">Đang mở/hoạt động</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Cách ghi nhận điểm</label>
+                        <select id="manageAssignmentScorePolicy" class="form-select bg-body-tertiary border-0 rounded-3 py-2">
+                            <option value="latest">Lượt cuối cùng</option>
+                            <option value="highest">Lượt có điểm cao nhất</option>
+                            <option value="first">Lượt đầu tiên</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <div class="bg-body-tertiary rounded-3 p-3">
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="manageAssignmentAllowRetry">
+                                <label class="form-check-label fw-bold" for="manageAssignmentAllowRetry">Cho phép làm lại</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="manageAssignmentShuffleQuestions">
+                                <label class="form-check-label fw-bold" for="manageAssignmentShuffleQuestions">Trộn thứ tự câu hỏi</label>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="manageAssignmentShuffleAnswers">
+                                <label class="form-check-label fw-bold" for="manageAssignmentShuffleAnswers">Trộn thứ tự đáp án</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Ghi chú</label>
+                        <textarea id="manageAssignmentDescription" class="form-control bg-body-tertiary border-0 rounded-3" rows="3"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0 d-flex justify-content-between">
+                <button type="button" class="btn btn-outline-danger rounded-pill px-4 fw-bold" onclick="deleteManagedAssignment()">
+                    <i class="fa-solid fa-trash me-2"></i>Xóa bài
+                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-light rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Hủy</button>
+                    <button type="button" id="btnSaveManagedAssignment" class="btn btn-primary rounded-pill px-5 fw-bold" onclick="saveManagedAssignment()">
+                        Lưu thay đổi
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="assignmentResultsModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
@@ -593,7 +712,12 @@
                     <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-square-poll-vertical me-2"></i>Kết quả bài tập</h4>
                     <p class="text-muted small mb-0" id="assignmentResultsTitle">Đang tải...</p>
                 </div>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="d-flex align-items-center gap-2">
+                    <a id="assignmentResultsExport" href="#" class="btn btn-sm btn-outline-success rounded-pill fw-bold d-none">
+                        <i class="fa-solid fa-file-csv me-1"></i>Xuất Excel/CSV
+                    </a>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
             </div>
             <div class="modal-body p-4">
                 <div id="assignmentResultsList" class="list-group rounded-4 overflow-hidden shadow-sm">
@@ -602,6 +726,23 @@
                         <div>Đang tải kết quả...</div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="submissionDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 pb-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-file-circle-check me-2"></i>Chi tiết bài nộp</h4>
+                    <p class="text-muted small mb-0" id="submissionDetailMeta">Đang tải...</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="submissionDetailQuestions" class="d-flex flex-column gap-3"></div>
             </div>
         </div>
     </div>
@@ -824,6 +965,8 @@
     let currentBankDetailVariantIndex = 0;
     window.examBankItems = [];
     window.examBankVariants = [];
+    window.currentClassAssignments = [];
+    window.currentAssignmentResultRows = [];
 
     function openAssignExamModal(classId, className) {
         currentAssignClassId = classId;
@@ -834,7 +977,13 @@
         document.getElementById('assignClassSelectArea').classList.add('d-none');
         document.getElementById('assignTitle').value = `Bài tập ${className}`;
         document.getElementById('assignDescription').value = '';
+        document.getElementById('assignOpensAt').value = '';
         document.getElementById('assignDueAt').value = '';
+        document.getElementById('assignDurationMinutes').value = '';
+        document.getElementById('assignScorePolicy').value = 'latest';
+        document.getElementById('assignAllowRetry').checked = false;
+        document.getElementById('assignShuffleQuestions').checked = false;
+        document.getElementById('assignShuffleAnswers').checked = false;
         document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
 
         loadExamBankForAssignment();
@@ -883,7 +1032,13 @@
         document.getElementById('assignClassSelectArea').classList.remove('d-none');
         document.getElementById('assignTitle').value = exam ? exam.title : 'Bài tập từ ngân hàng đề';
         document.getElementById('assignDescription').value = exam && exam.description ? exam.description : '';
+        document.getElementById('assignOpensAt').value = '';
         document.getElementById('assignDueAt').value = '';
+        document.getElementById('assignDurationMinutes').value = '';
+        document.getElementById('assignScorePolicy').value = 'latest';
+        document.getElementById('assignAllowRetry').checked = false;
+        document.getElementById('assignShuffleQuestions').checked = false;
+        document.getElementById('assignShuffleAnswers').checked = false;
         document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
 
         if (!classChecks.some((item) => item.checked)) {
@@ -1409,7 +1564,13 @@
             class_ids: classIds,
             title: document.getElementById('assignTitle').value.trim(),
             description: document.getElementById('assignDescription').value.trim(),
+            opens_at: document.getElementById('assignOpensAt').value,
             due_at: document.getElementById('assignDueAt').value,
+            duration_minutes: document.getElementById('assignDurationMinutes').value,
+            allow_retry: document.getElementById('assignAllowRetry').checked,
+            score_policy: document.getElementById('assignScorePolicy').value,
+            shuffle_questions: document.getElementById('assignShuffleQuestions').checked,
+            shuffle_answers: document.getElementById('assignShuffleAnswers').checked,
             content_tex: variant.content
         };
 
@@ -1460,6 +1621,7 @@
                 }
 
                 const assignments = data.assignments || [];
+                window.currentClassAssignments = assignments;
                 if (!assignments.length) {
                     listEl.innerHTML = `
                         <div class="list-group-item border-0 p-5 text-center text-muted">
@@ -1472,17 +1634,39 @@
 
                 listEl.innerHTML = assignments.map((assignment) => {
                     const dueText = assignment.due_at ? `Hạn: ${escapeHtml(assignment.due_at)}` : 'Không đặt hạn';
+                    const statusLabels = {
+                        available: '<span class="badge bg-success-subtle text-success border rounded-pill">Đang mở</span>',
+                        scheduled: '<span class="badge bg-warning-subtle text-warning-emphasis border rounded-pill">Chờ mở</span>',
+                        expired: '<span class="badge bg-secondary rounded-pill">Hết hạn</span>',
+                        closed: '<span class="badge bg-secondary rounded-pill">Đã đóng</span>'
+                    };
+                    const statusBadge = statusLabels[assignment.availability] || statusLabels.closed;
+                    const durationText = assignment.duration_minutes ? `${assignment.duration_minutes} phút` : 'Không giới hạn giờ';
+                    const scorePolicyText = {
+                        first: 'Lượt đầu',
+                        highest: 'Điểm cao nhất',
+                        latest: 'Lượt cuối'
+                    }[assignment.score_policy || 'latest'];
                     return `
                         <div class="list-group-item border-0 border-bottom p-3 bg-body">
                             <div class="d-flex justify-content-between align-items-start gap-3">
                                 <div>
-                                    <h6 class="fw-bold text-body mb-1">${escapeHtml(assignment.title)}</h6>
-                                    <div class="small text-muted">${assignment.total_questions} câu • ${dueText}</div>
-                                    <div class="small text-muted">Đã nộp: ${assignment.submission_count}</div>
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                        <h6 class="fw-bold text-body mb-0">${escapeHtml(assignment.title)}</h6>
+                                        ${statusBadge}
+                                    </div>
+                                    <div class="small text-muted">${assignment.total_questions} câu • ${durationText} • ${dueText}</div>
+                                    <div class="small text-muted">Đã nộp: ${assignment.submission_count} • Tính điểm: ${scorePolicyText}</div>
+                                    <div class="small text-muted">Phiên bản đề: <span class="font-monospace">${escapeHtml(assignment.version_hash || '-')}</span></div>
                                 </div>
-                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill fw-bold flex-shrink-0" onclick="openAssignmentResults(${assignment.id})">
-                                    <i class="fa-solid fa-chart-simple me-1"></i>Xem điểm
-                                </button>
+                                <div class="d-flex flex-column gap-2 flex-shrink-0">
+                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill fw-bold" onclick="openAssignmentResults(${assignment.id})">
+                                        <i class="fa-solid fa-chart-simple me-1"></i>Kết quả
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold" onclick="openManageAssignment(${assignment.id})">
+                                        <i class="fa-solid fa-sliders me-1"></i>Quản lý
+                                    </button>
+                                </div>
                             </div>
                         </div>`;
                 }).join('');
@@ -1492,9 +1676,99 @@
             });
     }
 
+    function toDateTimeLocalValue(value) {
+        return value ? String(value).replace(' ', 'T').slice(0, 16) : '';
+    }
+
+    function openManageAssignment(assignmentId) {
+        const assignment = (window.currentClassAssignments || []).find((item) => Number(item.id) === Number(assignmentId));
+        if (!assignment) {
+            alert('Không tìm thấy bài đã giao.');
+            return;
+        }
+
+        document.getElementById('manageAssignmentId').value = assignment.id;
+        document.getElementById('manageAssignmentTitle').value = assignment.title || '';
+        document.getElementById('manageAssignmentDescription').value = assignment.description || '';
+        document.getElementById('manageAssignmentOpensAt').value = toDateTimeLocalValue(assignment.opens_at);
+        document.getElementById('manageAssignmentDueAt').value = toDateTimeLocalValue(assignment.due_at);
+        document.getElementById('manageAssignmentDuration').value = assignment.duration_minutes || '';
+        document.getElementById('manageAssignmentActive').checked = Boolean(assignment.is_active);
+        document.getElementById('manageAssignmentAllowRetry').checked = Boolean(assignment.allow_retry);
+        document.getElementById('manageAssignmentScorePolicy').value = assignment.score_policy || 'latest';
+        document.getElementById('manageAssignmentShuffleQuestions').checked = Boolean(assignment.shuffle_questions);
+        document.getElementById('manageAssignmentShuffleAnswers').checked = Boolean(assignment.shuffle_answers);
+
+        new bootstrap.Modal(document.getElementById('manageAssignmentModal')).show();
+    }
+
+    function saveManagedAssignment() {
+        const assignmentId = document.getElementById('manageAssignmentId').value;
+        const payload = {
+            title: document.getElementById('manageAssignmentTitle').value.trim(),
+            description: document.getElementById('manageAssignmentDescription').value.trim(),
+            opens_at: document.getElementById('manageAssignmentOpensAt').value,
+            due_at: document.getElementById('manageAssignmentDueAt').value,
+            duration_minutes: document.getElementById('manageAssignmentDuration').value,
+            is_active: document.getElementById('manageAssignmentActive').checked,
+            allow_retry: document.getElementById('manageAssignmentAllowRetry').checked,
+            score_policy: document.getElementById('manageAssignmentScorePolicy').value,
+            shuffle_questions: document.getElementById('manageAssignmentShuffleQuestions').checked,
+            shuffle_answers: document.getElementById('manageAssignmentShuffleAnswers').checked
+        };
+
+        const btn = document.getElementById('btnSaveManagedAssignment');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang lưu...';
+
+        fetch(`/api/teacher/assignments/${assignmentId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không cập nhật được bài.');
+                    return;
+                }
+                const modal = bootstrap.Modal.getInstance(document.getElementById('manageAssignmentModal'));
+                if (modal) modal.hide();
+                loadClassAssignments();
+            })
+            .catch(() => alert('Lỗi kết nối khi cập nhật bài.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
+    function deleteManagedAssignment() {
+        const assignmentId = document.getElementById('manageAssignmentId').value;
+        const title = document.getElementById('manageAssignmentTitle').value.trim() || 'bài này';
+        if (!confirm(`Xóa "${title}"? Toàn bộ bài nộp và kết quả liên quan cũng sẽ bị xóa.`)) return;
+
+        fetch(`/api/teacher/assignments/${assignmentId}`, { method: 'DELETE' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không xóa được bài.');
+                    return;
+                }
+                const modal = bootstrap.Modal.getInstance(document.getElementById('manageAssignmentModal'));
+                if (modal) modal.hide();
+                loadClassAssignments();
+            })
+            .catch(() => alert('Lỗi kết nối khi xóa bài.'));
+    }
+
     function openAssignmentResults(assignmentId) {
         const modal = new bootstrap.Modal(document.getElementById('assignmentResultsModal'));
         const listEl = document.getElementById('assignmentResultsList');
+        const exportLink = document.getElementById('assignmentResultsExport');
+        exportLink.href = `/api/teacher/assignments/${assignmentId}/results.csv`;
+        exportLink.classList.add('d-none');
         document.getElementById('assignmentResultsTitle').textContent = 'Đang tải...';
         listEl.innerHTML = `<div class="list-group-item border-0 p-5 text-center text-muted"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tải kết quả...</div></div>`;
         modal.show();
@@ -1511,7 +1785,9 @@
                 const results = data.results || [];
                 const summary = data.summary || {};
                 const questionStats = data.question_stats || [];
+                window.currentAssignmentResultRows = results;
                 document.getElementById('assignmentResultsTitle').textContent = `${assignment.title} • ${assignment.class_name}`;
+                exportLink.classList.remove('d-none');
 
                 if (!results.length) {
                     listEl.innerHTML = '<div class="list-group-item border-0 p-5 text-center text-muted">Lớp chưa có sinh viên.</div>';
@@ -1564,6 +1840,7 @@
                                             <span class="badge bg-success-subtle text-success border rounded-pill">${item.correct_rate}% đúng</span>
                                         </div>
                                         <div class="small text-muted mb-2">Đáp án đúng: <strong>${escapeHtml(item.correct_answer)}</strong> • Đúng ${item.correct_count}, sai/trống ${item.wrong_count}</div>
+                                        <div class="small fw-bold mb-2 ${item.diagnostic === 'Phù hợp' ? 'text-success' : 'text-warning-emphasis'}">${escapeHtml(item.diagnostic || '')}</div>
                                         <div class="small d-flex flex-wrap gap-2">
                                             <span>A: ${item.option_counts?.A || 0}</span>
                                             <span>B: ${item.option_counts?.B || 0}</span>
@@ -1589,10 +1866,12 @@
                                 <div>
                                     <div class="fw-bold text-body">${index + 1}. ${escapeHtml(row.username)}</div>
                                     <div class="small text-muted">${row.submitted_at ? `Nộp lúc: ${escapeHtml(row.submitted_at)}` : 'Chưa có thời gian nộp'}</div>
+                                    <div class="small text-muted">${(row.attempt_history || []).length} lượt đã hoàn thành</div>
                                 </div>
                                 <div class="text-end">
                                     ${statusBadge}
                                     <div class="mt-1">${scoreText}</div>
+                                    ${row.submitted ? `<button type="button" class="btn btn-sm btn-link px-0 mt-1 fw-bold" onclick="openSubmissionDetail(${index})">Xem bài</button>` : ''}
                                 </div>
                             </div>
                         </div>`;
@@ -1603,6 +1882,67 @@
             .catch(() => {
                 listEl.innerHTML = '<div class="list-group-item border-0 p-4 text-danger">Lỗi kết nối khi tải kết quả.</div>';
             });
+    }
+
+    function openSubmissionDetail(rowIndex) {
+        const row = (window.currentAssignmentResultRows || [])[Number(rowIndex)];
+        if (!row || !row.submitted) return;
+
+        document.getElementById('submissionDetailMeta').textContent = `${row.username} • ${row.score}/10 • ${row.correct_count}/${row.total_questions} câu đúng`;
+        const container = document.getElementById('submissionDetailQuestions');
+        const details = row.question_details || [];
+        const history = row.attempt_history || [];
+        const historyHtml = history.length ? `
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <h6 class="fw-bold text-primary mb-3"><i class="fa-solid fa-clock-rotate-left me-2"></i>Lịch sử lượt làm</h6>
+                    <div class="table-responsive">
+                        <table class="table align-middle mb-0">
+                            <thead><tr><th>Lượt</th><th>Điểm</th><th>Bắt đầu</th><th>Nộp bài</th><th>Trạng thái</th></tr></thead>
+                            <tbody>
+                                ${history.map((attempt) => `
+                                    <tr>
+                                        <td><strong>${attempt.attempt_number}</strong>${attempt.is_selected ? ' <span class="badge bg-primary ms-1">Được tính</span>' : ''}</td>
+                                        <td>${attempt.score}/10 (${attempt.correct_count}/${attempt.total_questions})</td>
+                                        <td class="small">${escapeHtml(attempt.started_at)}</td>
+                                        <td class="small">${escapeHtml(attempt.completed_at)}</td>
+                                        <td>${attempt.completion_reason === 'timeout' ? 'Hết giờ' : 'Đã nộp'}</td>
+                                    </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>` : '';
+        container.innerHTML = historyHtml + details.map((question) => {
+            const choicesHtml = (question.choices || []).map((choice) => {
+                const isSelected = choice.letter === question.selected_answer;
+                const isCorrect = choice.letter === question.correct_answer;
+                let classes = 'border rounded-3 p-3';
+                if (isCorrect) classes += ' border-success bg-success-subtle';
+                else if (isSelected) classes += ' border-danger bg-danger-subtle';
+                return `
+                    <div class="${classes}">
+                        <strong>${escapeHtml(choice.letter)}.</strong> ${escapeHtml(choice.content)}
+                        ${isCorrect ? '<span class="badge bg-success ms-2">Đáp án đúng</span>' : ''}
+                        ${isSelected ? '<span class="badge bg-primary ms-2">Sinh viên chọn</span>' : ''}
+                    </div>`;
+            }).join('');
+
+            return `
+                <div class="card border-0 shadow-sm rounded-4">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center gap-3 mb-3">
+                            <h6 class="fw-bold text-primary mb-0">Câu ${question.question_number}</h6>
+                            <span class="badge ${question.is_correct ? 'bg-success' : 'bg-danger'} rounded-pill">${question.is_correct ? 'Đúng' : 'Sai'}</span>
+                        </div>
+                        <div class="mb-3" style="white-space:pre-line;">${escapeHtml(question.prompt)}</div>
+                        <div class="d-flex flex-column gap-2">${choicesHtml}</div>
+                    </div>
+                </div>`;
+        }).join('') || '<div class="text-center text-muted py-5">Không có dữ liệu chi tiết.</div>';
+
+        new bootstrap.Modal(document.getElementById('submissionDetailModal')).show();
+        if (window.MathJax) MathJax.typesetPromise([container]);
     }
 
     // ==============================================================
