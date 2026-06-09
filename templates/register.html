@@ -48,6 +48,7 @@
         {% endwith %}
 
         <form method="POST" action="/register">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div class="row g-4 mb-4">
                 
                 <div class="col-12">

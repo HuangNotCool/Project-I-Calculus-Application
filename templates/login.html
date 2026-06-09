@@ -25,6 +25,7 @@
                 {% endwith %}
 
                 <form method="POST" action="/login" class="position-relative z-1">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
                             <span class="input-group-text border-0 text-primary bg-body"><i class="fa-solid fa-user"></i></span>

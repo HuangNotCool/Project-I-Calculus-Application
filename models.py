@@ -1,8 +1,19 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import os
 
 db = SQLAlchemy()
+
+
+def app_now():
+    timezone_name = os.getenv('APP_TIMEZONE', 'Asia/Bangkok')
+    try:
+        configured_timezone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        configured_timezone = timezone(timedelta(hours=float(os.getenv('APP_UTC_OFFSET_HOURS', '7'))))
+    return datetime.now(configured_timezone).replace(tzinfo=None)
 
 # Bảng trung gian lưu trữ Học sinh sở hữu Huy hiệu nào
 user_badges = db.Table('user_badges',
@@ -40,6 +51,7 @@ class Class(db.Model):
 
 class Badge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    code = db.Column(db.String(50), unique=True)
     name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.String(250), nullable=False)
     icon = db.Column(db.String(50), nullable=False)
@@ -54,8 +66,8 @@ class ExamTemplate(db.Model):
     description = db.Column(db.String(500))
     status = db.Column(db.String(30), default='draft')
     content = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=app_now)
+    updated_at = db.Column(db.DateTime, default=app_now, onupdate=app_now)
 
     teacher = db.relationship('User', backref=db.backref('exam_templates', lazy=True))
 
@@ -70,8 +82,8 @@ class ExamBank(db.Model):
     combined_tex = db.Column(db.Text, nullable=False)
     total_variants = db.Column(db.Integer, default=0)
     total_questions = db.Column(db.Integer, default=0)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=app_now)
+    updated_at = db.Column(db.DateTime, default=app_now, onupdate=app_now)
 
     teacher = db.relationship('User', backref=db.backref('exam_bank_items', lazy=True))
 
@@ -94,8 +106,8 @@ class Assignment(db.Model):
     answer_key_json = db.Column(db.Text, nullable=False)
     total_questions = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=app_now)
+    updated_at = db.Column(db.DateTime, default=app_now, onupdate=app_now)
 
     classroom = db.relationship('Class', backref=db.backref('assignments', lazy=True, cascade='all, delete-orphan'))
     teacher = db.relationship('User', backref=db.backref('created_assignments', lazy=True))
@@ -109,7 +121,7 @@ class AssignmentAttempt(db.Model):
     questions_json = db.Column(db.Text, nullable=False)
     answer_key_json = db.Column(db.Text, nullable=False)
     answers_json = db.Column(db.Text, default='{}', nullable=False)
-    started_at = db.Column(db.DateTime, default=datetime.now)
+    started_at = db.Column(db.DateTime, default=app_now)
     expires_at = db.Column(db.DateTime)
     last_saved_at = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime)
@@ -119,6 +131,8 @@ class AssignmentAttempt(db.Model):
     total_questions = db.Column(db.Integer, default=0)
     score = db.Column(db.Float, default=0.0)
     max_score = db.Column(db.Float, default=10.0)
+    submission_token = db.Column(db.String(96))
+    submission_response_json = db.Column(db.Text)
 
     assignment = db.relationship('Assignment', backref=db.backref('attempts', lazy=True, cascade='all, delete-orphan'))
     student = db.relationship('User', backref=db.backref('assignment_attempts', lazy=True))
@@ -134,7 +148,7 @@ class Submission(db.Model):
     score = db.Column(db.Float, default=0.0)
     max_score = db.Column(db.Float, default=10.0)
     selected_attempt_id = db.Column(db.Integer)
-    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime, default=app_now)
 
     assignment = db.relationship('Assignment', backref=db.backref('submissions', lazy=True, cascade='all, delete-orphan'))
     student = db.relationship('User', backref=db.backref('submissions', lazy=True))
@@ -153,7 +167,7 @@ class Notification(db.Model):
     link = db.Column(db.String(250))
     dedupe_key = db.Column(db.String(200))
     is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=app_now)
 
     user = db.relationship('User', backref=db.backref('notifications', lazy=True, cascade='all, delete-orphan'))
 

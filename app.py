@@ -1,8 +1,11 @@
-from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file,abort
+from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file, abort, g
 from models import db, User, Badge, Class, ExamTemplate, ExamBank, Assignment, AssignmentAttempt, Submission, Notification
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import inspect
+from functools import wraps
+from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import sympy as sp
 import random
 import os
@@ -12,19 +15,223 @@ import io
 import re
 import csv
 import hashlib
+import secrets
+import sqlite3
+import threading
+import time
+import click
 import numpy as np
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
+
+BASE_DIR = Path(__file__).resolve().parent
+INSTANCE_DIR = BASE_DIR / 'instance'
+INSTANCE_DIR.mkdir(exist_ok=True)
+
+
+def load_local_env():
+    env_path = BASE_DIR / '.env'
+    if not env_path.exists():
+        return
+    for raw_line in env_path.read_text(encoding='utf-8').splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key:
+            os.environ.setdefault(key, value)
+
+
+def get_secret_key():
+    configured = os.getenv('SECRET_KEY', '').strip()
+    if configured:
+        return configured
+    secret_path = INSTANCE_DIR / '.secret_key'
+    if secret_path.exists():
+        return secret_path.read_text(encoding='utf-8').strip()
+    generated = secrets.token_urlsafe(48)
+    secret_path.write_text(generated, encoding='utf-8')
+    return generated
+
+
+load_local_env()
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'mot_chuoi_bi_mat_cuc_ky_kho_doan'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+app.config['SECRET_KEY'] = get_secret_key()
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///database.db')
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('COOKIE_SECURE', '0') == '1'
+app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))
+app.config['APP_TIMEZONE'] = os.getenv('APP_TIMEZONE', 'Asia/Bangkok')
+
+
+def app_now():
+    try:
+        configured_timezone = ZoneInfo(app.config['APP_TIMEZONE'])
+    except ZoneInfoNotFoundError:
+        configured_timezone = timezone(timedelta(hours=float(os.getenv('APP_UTC_OFFSET_HOURS', '7'))))
+    return datetime.now(configured_timezone).replace(tzinfo=None)
 
 db.init_app(app)
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
+
+
+_rate_limit_lock = threading.Lock()
+_rate_limit_events = {}
+_submission_locks_guard = threading.Lock()
+_submission_locks = {}
+
+
+def security_error(message, status=403):
+    if request.path.startswith('/api/'):
+        return jsonify({'success': False, 'message': message}), status
+    abort(status, description=message)
+
+
+def get_csrf_token():
+    token = session.get('_csrf_token')
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session['_csrf_token'] = token
+    return token
+
+
+@app.context_processor
+def inject_security_context():
+    return {'csrf_token': get_csrf_token}
+
+
+@app.before_request
+def enforce_request_security():
+    g.request_started_at = time.monotonic()
+
+    if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
+        supplied_token = request.headers.get('X-CSRF-Token') or request.form.get('_csrf_token')
+        expected_token = session.get('_csrf_token')
+        if not expected_token or not supplied_token or not secrets.compare_digest(expected_token, supplied_token):
+            return security_error('Phiên bảo mật không hợp lệ. Hãy tải lại trang và thử lại.', 400)
+
+    if not request.path.startswith('/api/'):
+        return None
+
+    teacher_prefixes = (
+        '/api/teacher/',
+        '/api/exam-bank',
+        '/api/template-library',
+        '/api/custom-exam',
+        '/api/generate-exam'
+    )
+    student_prefixes = ('/api/student/',)
+    required_role = None
+    if request.path.startswith(teacher_prefixes):
+        required_role = 'teacher'
+    elif request.path.startswith(student_prefixes):
+        required_role = 'student'
+
+    if required_role:
+        if not current_user.is_authenticated:
+            return security_error('Vui lòng đăng nhập để tiếp tục.', 401)
+        if current_user.role != required_role:
+            return security_error('Bạn không có quyền thực hiện thao tác này.', 403)
+    return None
+
+
+def rate_limit(limit, window_seconds, key_prefix):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if request.method == 'GET':
+                return func(*args, **kwargs)
+            identity = str(current_user.id) if current_user.is_authenticated else request.remote_addr or 'unknown'
+            if key_prefix == 'login':
+                identity = f'{identity}:{str(request.form.get("username") or "").strip().lower()}'
+            key = f'{key_prefix}:{identity}'
+            now = time.monotonic()
+            cutoff = now - window_seconds
+
+            with _rate_limit_lock:
+                events = [event for event in _rate_limit_events.get(key, []) if event > cutoff]
+                if len(events) >= limit:
+                    retry_after = max(1, int(window_seconds - (now - events[0])))
+                    response = security_error(
+                        f'Bạn thao tác quá nhanh. Vui lòng thử lại sau {retry_after} giây.',
+                        429
+                    )
+                    if isinstance(response, tuple):
+                        response[0].headers['Retry-After'] = str(retry_after)
+                    return response
+                events.append(now)
+                _rate_limit_events[key] = events
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def role_required(role):
+    def decorator(func):
+        @wraps(func)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if current_user.role != role:
+                return security_error('Bạn không có quyền thực hiện thao tác này.', 403)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def teacher_owns_class(func):
+    @wraps(func)
+    @role_required('teacher')
+    def wrapper(*args, **kwargs):
+        class_id = kwargs.get('class_id')
+        target_class = Class.query.get_or_404(class_id)
+        if target_class.teacher_id != current_user.id:
+            return security_error('Bạn không có quyền truy cập lớp này.', 403)
+        g.target_class = target_class
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def teacher_owns_assignment(func):
+    @wraps(func)
+    @role_required('teacher')
+    def wrapper(*args, **kwargs):
+        assignment_id = kwargs.get('assignment_id')
+        assignment = Assignment.query.get_or_404(assignment_id)
+        if assignment.teacher_id != current_user.id:
+            return security_error('Bạn không có quyền truy cập bài được giao này.', 403)
+        g.assignment = assignment
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def student_can_access_assignment(func):
+    @wraps(func)
+    @role_required('student')
+    def wrapper(*args, **kwargs):
+        assignment_id = kwargs.get('assignment_id')
+        assignment = Assignment.query.get_or_404(assignment_id)
+        if assignment.class_id not in {item.id for item in current_user.enrolled_classes}:
+            return security_error('Bạn không thuộc lớp được giao bài này.', 403)
+        g.assignment = assignment
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def get_submission_lock(attempt_id):
+    with _submission_locks_guard:
+        lock = _submission_locks.get(attempt_id)
+        if lock is None:
+            lock = threading.Lock()
+            _submission_locks[attempt_id] = lock
+        return lock
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -684,7 +891,7 @@ def serialize_assignment_summary(assignment, include_class=False, student_id=Non
             .all()
         )
 
-    now = datetime.now()
+    now = app_now()
     if not assignment.is_active:
         availability = 'closed'
     elif assignment.opens_at and now < assignment.opens_at:
@@ -810,7 +1017,7 @@ def build_assignment_attempt_content(assignment):
 
 def create_assignment_attempt(assignment, student_id):
     questions, answer_key = build_assignment_attempt_content(assignment)
-    now = datetime.now()
+    now = app_now()
     expires_at = None
     if assignment.duration_minutes:
         expires_at = now + timedelta(minutes=assignment.duration_minutes)
@@ -828,6 +1035,7 @@ def create_assignment_attempt(assignment, student_id):
         questions_json=json.dumps(questions, ensure_ascii=False),
         answer_key_json=json.dumps(answer_key, ensure_ascii=False),
         answers_json='{}',
+        submission_token=secrets.token_urlsafe(32),
         started_at=now,
         expires_at=expires_at,
         total_questions=len(answer_key),
@@ -908,7 +1116,7 @@ def refresh_submission_from_attempts(assignment, student_id):
     submission.score = selected_attempt.score or 0
     submission.max_score = selected_attempt.max_score or 10.0
     submission.selected_attempt_id = selected_attempt.id
-    submission.submitted_at = selected_attempt.completed_at or datetime.now()
+    submission.submitted_at = selected_attempt.completed_at or app_now()
     return submission
 
 
@@ -929,8 +1137,161 @@ def create_notification(user_id, title, message, category='info', link='', dedup
     return notification
 
 
+BADGE_DEFINITIONS = [
+    {
+        'code': 'account_created',
+        'name': 'Khởi đầu mới',
+        'description': 'Tạo tài khoản học sinh trên hệ thống Giải Tích HUST.',
+        'icon': 'fa-seedling',
+        'color': 'text-success',
+        'metric': 'account',
+        'target': 1
+    },
+    {
+        'code': 'class_1',
+        'name': 'Thành viên lớp học',
+        'description': 'Tham gia lớp học đầu tiên.',
+        'icon': 'fa-school',
+        'color': 'text-primary',
+        'metric': 'classes',
+        'target': 1
+    },
+    {
+        'code': 'assignment_1',
+        'name': 'Bài làm đầu tiên',
+        'description': 'Hoàn thành bài tập đầu tiên.',
+        'icon': 'fa-file-circle-check',
+        'color': 'text-info',
+        'metric': 'assignments',
+        'target': 1
+    },
+    {
+        'code': 'class_10',
+        'name': 'Học viên năng động',
+        'description': 'Tham gia 10 lớp học.',
+        'icon': 'fa-users',
+        'color': 'text-warning',
+        'metric': 'classes',
+        'target': 10
+    },
+    {
+        'code': 'assignment_10',
+        'name': 'Bền bỉ',
+        'description': 'Hoàn thành 10 bài tập khác nhau.',
+        'icon': 'fa-medal',
+        'color': 'text-danger',
+        'metric': 'assignments',
+        'target': 10
+    },
+    {
+        'code': 'assignment_100',
+        'name': 'Bậc thầy luyện tập',
+        'description': 'Hoàn thành 100 bài tập khác nhau.',
+        'icon': 'fa-trophy',
+        'color': 'text-warning',
+        'metric': 'assignments',
+        'target': 100
+    }
+]
+
+
+def ensure_badge_schema():
+    inspector = inspect(db.engine)
+    if 'badge' not in inspector.get_table_names():
+        return
+    existing_columns = {column['name'] for column in inspector.get_columns('badge')}
+    if 'code' not in existing_columns:
+        with db.engine.begin() as connection:
+            connection.exec_driver_sql('ALTER TABLE badge ADD COLUMN code VARCHAR(50)')
+
+
+def ensure_badge_catalog():
+    legacy_starter = Badge.query.filter_by(name='Một hành trình mới').first()
+    for definition in BADGE_DEFINITIONS:
+        badge = Badge.query.filter_by(code=definition['code']).first()
+        if not badge and definition['code'] == 'account_created' and legacy_starter:
+            badge = legacy_starter
+        if not badge:
+            badge = Badge(code=definition['code'])
+            db.session.add(badge)
+        badge.code = definition['code']
+        badge.name = definition['name']
+        badge.description = definition['description']
+        badge.icon = definition['icon']
+        badge.color = definition['color']
+
+    for legacy_name in ('Kẻ hủy diệt', 'Cú đêm chăm chỉ'):
+        legacy_badge = Badge.query.filter_by(name=legacy_name).first()
+        if legacy_badge:
+            for user in list(legacy_badge.users):
+                user.badges.remove(legacy_badge)
+            db.session.delete(legacy_badge)
+    db.session.commit()
+
+
+def get_student_badge_metrics(student):
+    return {
+        'account': 1,
+        'classes': len(student.enrolled_classes),
+        'assignments': Submission.query.filter_by(student_id=student.id).count()
+    }
+
+
+def award_student_badges(student, notify=True):
+    if not student or student.role != 'student':
+        return []
+
+    metrics = get_student_badge_metrics(student)
+    owned_codes = {badge.code for badge in student.badges}
+    awarded = []
+    for definition in BADGE_DEFINITIONS:
+        if metrics[definition['metric']] < definition['target']:
+            continue
+        if definition['code'] in owned_codes:
+            continue
+        badge = Badge.query.filter_by(code=definition['code']).first()
+        if not badge:
+            continue
+        student.badges.append(badge)
+        owned_codes.add(definition['code'])
+        awarded.append(badge)
+        if notify:
+            create_notification(
+                student.id,
+                'Mở khóa huy hiệu mới',
+                f'Bạn đã nhận huy hiệu “{badge.name}”.',
+                category='success',
+                link='#tab-achievements',
+                dedupe_key=f'badge-earned-{badge.code}'
+            )
+    return awarded
+
+
+def serialize_student_badge_progress(student):
+    metrics = get_student_badge_metrics(student)
+    owned_codes = {badge.code for badge in student.badges}
+    items = []
+    for definition in BADGE_DEFINITIONS:
+        current = metrics[definition['metric']]
+        target = definition['target']
+        items.append({
+            **definition,
+            'current': min(current, target),
+            'actual_current': current,
+            'unlocked': definition['code'] in owned_codes,
+            'progress_percent': min(round((current / target) * 100), 100)
+        })
+    return {
+        'items': items,
+        'unlocked_count': sum(1 for item in items if item['unlocked']),
+        'total_count': len(items),
+        'class_count': metrics['classes'],
+        'assignment_count': metrics['assignments']
+    }
+
+
 def ensure_due_notifications(student):
-    now = datetime.now()
+    now = app_now()
     soon = now + timedelta(hours=24)
     class_ids = [item.id for item in student.enrolled_classes]
     if not class_ids:
@@ -973,8 +1334,8 @@ def save_attempt_submission(assignment, attempt, student_id, answers, completion
     attempt.score = score
     attempt.max_score = 10.0
     attempt.is_completed = True
-    attempt.completed_at = datetime.now()
-    attempt.last_saved_at = datetime.now()
+    attempt.completed_at = app_now()
+    attempt.last_saved_at = app_now()
     attempt.completion_reason = completion_reason
     submission = refresh_submission_from_attempts(assignment, student_id)
     create_notification(
@@ -985,6 +1346,8 @@ def save_attempt_submission(assignment, attempt, student_id, answers, completion
         link='#tab-practice',
         dedupe_key=f'attempt-submitted-{attempt.id}'
     )
+    db.session.flush()
+    award_student_badges(db.session.get(User, student_id))
     db.session.commit()
     return submission
 
@@ -1038,7 +1401,9 @@ def ensure_attempt_schema():
         'correct_count': 'INTEGER DEFAULT 0',
         'total_questions': 'INTEGER DEFAULT 0',
         'score': 'FLOAT DEFAULT 0',
-        'max_score': 'FLOAT DEFAULT 10'
+        'max_score': 'FLOAT DEFAULT 10',
+        'submission_token': 'VARCHAR(96)',
+        'submission_response_json': 'TEXT'
     }
     with db.engine.begin() as connection:
         for column_name, column_type in additions.items():
@@ -1088,31 +1453,87 @@ def backfill_attempt_results():
         attempt.last_saved_at = attempt.last_saved_at or attempt.completed_at
         submission.selected_attempt_id = attempt.id
         changed = True
+    for attempt in AssignmentAttempt.query.filter(
+        (AssignmentAttempt.submission_token.is_(None)) | (AssignmentAttempt.submission_token == '')
+    ).all():
+        attempt.submission_token = secrets.token_urlsafe(32)
+        changed = True
     if changed:
         db.session.commit()
 
 
 with app.app_context():
     db.create_all()
+    ensure_badge_schema()
     ensure_exam_bank_schema()
     ensure_assignment_schema()
     ensure_attempt_schema()
     ensure_submission_schema()
     backfill_assignment_versions()
     backfill_attempt_results()
-    
-    # Khởi tạo huy hiệu mặc định nếu chưa có
-    if not Badge.query.first():
-        b1 = Badge(name="Một hành trình mới", description="Tạo tài khoản và gia nhập hệ thống Giải tích HUST.", icon="fa-seedling", color="text-success")
-        b2 = Badge(name="Kẻ hủy diệt", description="Hoàn thành bài kiểm tra đầu tiên với điểm số tuyệt đối.", icon="fa-fire", color="text-danger")
-        b3 = Badge(name="Cú đêm chăm chỉ", description="Làm bài tập ôn luyện sau 12h đêm.", icon="fa-moon", color="text-warning")
-        db.session.add_all([b1, b2, b3])
-        db.session.commit()
+    ensure_badge_catalog()
+    for existing_student in User.query.filter_by(role='student').all():
+        award_student_badges(existing_student, notify=False)
+    db.session.commit()
+
+
+def backup_sqlite_database(output_path=None):
+    with app.app_context():
+        if db.engine.url.get_backend_name() != 'sqlite':
+            raise RuntimeError('Lệnh sao lưu nội bộ hiện chỉ hỗ trợ SQLite.')
+        source_path = Path(db.engine.url.database).resolve()
+        if not source_path.exists():
+            raise FileNotFoundError(f'Không tìm thấy database: {source_path}')
+
+        backup_dir = (INSTANCE_DIR / 'backups').resolve()
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        if output_path:
+            destination_path = Path(output_path).expanduser().resolve()
+        else:
+            timestamp = app_now().strftime('%Y%m%d_%H%M%S')
+            destination_path = backup_dir / f'database_{timestamp}.db'
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+
+        source_connection = sqlite3.connect(f'file:{source_path.as_posix()}?mode=ro', uri=True)
+        destination_connection = sqlite3.connect(str(destination_path))
+        try:
+            source_connection.backup(destination_connection)
+            integrity_result = destination_connection.execute('PRAGMA integrity_check').fetchone()
+            if not integrity_result or integrity_result[0] != 'ok':
+                raise RuntimeError('Bản sao lưu không vượt qua kiểm tra toàn vẹn.')
+        finally:
+            destination_connection.close()
+            source_connection.close()
+
+        keep_count = max(int(os.getenv('BACKUP_KEEP', '10')), 1)
+        automatic_backups = sorted(
+            backup_dir.glob('database_*.db'),
+            key=lambda item: item.stat().st_mtime,
+            reverse=True
+        )
+        for old_backup in automatic_backups[keep_count:]:
+            old_backup.unlink()
+        return destination_path
+
+
+@app.cli.command('backup-db')
+@click.option('--output', type=click.Path(dir_okay=False, path_type=Path))
+def backup_db_command(output):
+    """Create a consistent SQLite backup and verify its integrity."""
+    backup_path = backup_sqlite_database(output)
+    click.echo(f'Backup created: {backup_path}')
+
 
 # --- CÁC ĐƯỜNG DẪN CƠ BẢN ---
 @app.route('/')
 def home():
     return render_template('index.html')
+
+
+@app.route('/api/security/csrf-token')
+def api_security_csrf_token():
+    return jsonify({'success': True, 'csrf_token': get_csrf_token()})
+
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -1132,12 +1553,9 @@ def register():
         db.session.add(new_user)
         db.session.commit() 
         
-        # Trao huy hiệu cho học sinh mới
         if role == 'student':
-            starter_badge = Badge.query.filter_by(name="Một hành trình mới").first()
-            if starter_badge:
-                new_user.badges.append(starter_badge)
-                db.session.commit()
+            award_student_badges(new_user, notify=False)
+            db.session.commit()
         
         flash('Đăng ký thành công! Vui lòng đăng nhập.', 'success')
         return redirect(url_for('login'))
@@ -1145,6 +1563,7 @@ def register():
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
+@rate_limit(5, 60, 'login')
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
@@ -1164,7 +1583,7 @@ def login():
 
     return render_template('login.html')
 
-@app.route('/logout')
+@app.route('/logout', methods=['POST'])
 @login_required
 def logout():
     logout_user()
@@ -1173,6 +1592,9 @@ def logout():
 @app.route('/profile')
 @login_required
 def profile():
+    if current_user.role == 'student':
+        award_student_badges(current_user, notify=False)
+        db.session.commit()
     return render_template('profile.html', user=current_user)
 
 @app.route('/teacher-dashboard')
@@ -1199,18 +1621,22 @@ def student_dashboard():
     
     # Lấy danh sách các lớp học mà học sinh này đã tham gia (nhờ relationship enrolled_classes trong models)
     my_classes = current_user.enrolled_classes
-    return render_template('student_dashboard.html', classes=my_classes)
+    award_student_badges(current_user, notify=False)
+    db.session.commit()
+    badge_progress = serialize_student_badge_progress(current_user)
+    return render_template(
+        'student_dashboard.html',
+        classes=my_classes,
+        badge_progress=badge_progress
+    )
 
 
 # =====================================================================
 # --- API GIẢNG VIÊN: TẠO LỚP HỌC MỚI ---
 # =====================================================================
 @app.route('/api/teacher/create-class', methods=['POST'])
-@login_required
+@role_required('teacher')
 def api_create_class():
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
     name = request.form.get('name')
     description = request.form.get('description')
     code = request.form.get('code')
@@ -1234,17 +1660,9 @@ def api_create_class():
 # --- API GIẢNG VIÊN: XÓA LỚP HỌC ---
 # =====================================================================
 @app.route('/api/teacher/delete-class/<int:class_id>', methods=['POST'])
-@login_required
+@teacher_owns_class
 def api_delete_class(class_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    # Tìm lớp học trong CSDL
-    target_class = Class.query.get_or_404(class_id)
-    
-    # Xác thực: Chỉ người tạo lớp mới được quyền xóa
-    if target_class.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xóa lớp này!'})
+    target_class = g.target_class
 
     try:
         # Hủy liên kết với tất cả học sinh trước khi xóa lớp
@@ -1568,16 +1986,9 @@ def custom_exam_generate():
 # --- API GIẢNG VIÊN: XEM DANH SÁCH SINH VIÊN TRONG LỚP ---
 # =====================================================================
 @app.route('/api/teacher/class/<int:class_id>/students', methods=['GET'])
-@login_required
+@teacher_owns_class
 def api_get_class_students(class_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    target_class = Class.query.get_or_404(class_id)
-    
-    # Xác thực quyền sở hữu lớp
-    if target_class.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xem lớp này!'})
+    target_class = g.target_class
 
     # Đóng gói dữ liệu sinh viên
     students_data = []
@@ -1601,11 +2012,8 @@ def api_get_class_students(class_id):
 # --- API KẾT NỐI: HỌC SINH THAM GIA LỚP HỌC (DATABASE THẬT) ---
 # =====================================================================
 @app.route('/api/student/join-class', methods=['POST'])
-@login_required
+@role_required('student')
 def student_join_class():
-    if current_user.role != 'student':
-        return jsonify({'success': False, 'message': 'Chỉ học sinh mới có thể tham gia lớp!'})
-
     class_code = request.form.get('class_code', '').strip().upper()
 
     if not class_code:
@@ -1621,6 +2029,8 @@ def student_join_class():
         
         # 3. Thêm học sinh vào lớp và lưu lại
         target_class.students.append(current_user)
+        db.session.commit()
+        award_student_badges(current_user)
         db.session.commit()
 
         # Lấy tên giáo viên phụ trách để trả về 
@@ -1878,11 +2288,8 @@ def download_exam_bank_variant_pdf(exam_id, variant_index):
 
 
 @app.route('/api/teacher/assignments', methods=['POST'])
-@login_required
+@role_required('teacher')
 def api_teacher_create_assignment():
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
     data = request.get_json() or {}
     class_id = data.get('class_id')
     class_ids = data.get('class_ids')
@@ -1990,15 +2397,8 @@ def api_teacher_create_assignment():
 
 
 @app.route('/api/teacher/class/<int:class_id>/assignments', methods=['GET'])
-@login_required
+@teacher_owns_class
 def api_teacher_class_assignments(class_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    target_class = Class.query.get_or_404(class_id)
-    if target_class.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xem lớp này.'}), 403
-
     assignments = (
         Assignment.query
         .filter_by(class_id=class_id, teacher_id=current_user.id)
@@ -2013,14 +2413,9 @@ def api_teacher_class_assignments(class_id):
 
 
 @app.route('/api/teacher/assignments/<int:assignment_id>', methods=['PUT'])
-@login_required
+@teacher_owns_assignment
 def api_teacher_update_assignment(assignment_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    if assignment.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền sửa bài này.'}), 403
+    assignment = g.assignment
 
     data = request.get_json() or {}
     title = str(data.get('title') or assignment.title).strip()
@@ -2069,14 +2464,9 @@ def api_teacher_update_assignment(assignment_id):
 
 
 @app.route('/api/teacher/assignments/<int:assignment_id>', methods=['DELETE'])
-@login_required
+@teacher_owns_assignment
 def api_teacher_delete_assignment(assignment_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    if assignment.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xóa bài này.'}), 403
+    assignment = g.assignment
 
     db.session.delete(assignment)
     db.session.commit()
@@ -2084,14 +2474,9 @@ def api_teacher_delete_assignment(assignment_id):
 
 
 @app.route('/api/teacher/assignments/<int:assignment_id>/results', methods=['GET'])
-@login_required
+@teacher_owns_assignment
 def api_teacher_assignment_results(assignment_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'})
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    if assignment.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xem kết quả bài này.'}), 403
+    assignment = g.assignment
 
     submissions_by_student = {submission.student_id: submission for submission in assignment.submissions}
     answer_key = json.loads(assignment.answer_key_json or '[]')
@@ -2218,14 +2603,9 @@ def api_teacher_assignment_results(assignment_id):
 
 
 @app.route('/api/teacher/assignments/<int:assignment_id>/results.csv', methods=['GET'])
-@login_required
+@teacher_owns_assignment
 def api_teacher_assignment_results_csv(assignment_id):
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập!'}), 403
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    if assignment.teacher_id != current_user.id:
-        return jsonify({'success': False, 'message': 'Bạn không có quyền xuất kết quả bài này.'}), 403
+    assignment = g.assignment
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -2265,11 +2645,8 @@ def api_teacher_assignment_results_csv(assignment_id):
 
 
 @app.route('/api/student/assignments', methods=['GET'])
-@login_required
+@role_required('student')
 def api_student_assignments():
-    if current_user.role != 'student':
-        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới xem được danh sách bài tập.'})
-
     class_ids = [item.id for item in current_user.enrolled_classes]
     if not class_ids:
         return jsonify({'success': True, 'assignments': []})
@@ -2338,17 +2715,11 @@ def api_notifications_read():
 
 
 @app.route('/api/student/assignments/<int:assignment_id>', methods=['GET'])
-@login_required
+@student_can_access_assignment
 def api_student_assignment_detail(assignment_id):
-    if current_user.role != 'student':
-        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới xem được bài tập.'})
+    assignment = g.assignment
 
-    assignment = Assignment.query.get_or_404(assignment_id)
-    enrolled_class_ids = [item.id for item in current_user.enrolled_classes]
-    if assignment.class_id not in enrolled_class_ids:
-        return jsonify({'success': False, 'message': 'Bạn không thuộc lớp được giao bài này.'}), 403
-
-    now = datetime.now()
+    now = app_now()
     start_retry = parse_bool(request.args.get('start_retry'))
     submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=current_user.id).first()
     selected_attempt = get_submission_attempt(assignment, submission)
@@ -2422,7 +2793,7 @@ def api_student_assignment_detail(assignment_id):
 
     remaining_seconds = None
     if attempt.expires_at:
-        remaining_seconds = max(int((attempt.expires_at - datetime.now()).total_seconds()), 0)
+        remaining_seconds = max(int((attempt.expires_at - app_now()).total_seconds()), 0)
 
     return jsonify({
         'success': True,
@@ -2430,6 +2801,7 @@ def api_student_assignment_detail(assignment_id):
         'questions': json.loads(attempt.questions_json or '[]'),
         'attempt': {
             'id': attempt.id,
+            'submission_token': attempt.submission_token,
             'attempt_number': attempt.attempt_number,
             'started_at': attempt.started_at.strftime('%Y-%m-%d %H:%M:%S') if attempt.started_at else '',
             'expires_at': attempt.expires_at.strftime('%Y-%m-%d %H:%M:%S') if attempt.expires_at else '',
@@ -2448,14 +2820,10 @@ def api_student_assignment_detail(assignment_id):
 
 
 @app.route('/api/student/assignments/<int:assignment_id>/autosave', methods=['POST'])
-@login_required
+@student_can_access_assignment
+@rate_limit(30, 60, 'assignment-autosave')
 def api_student_autosave_assignment(assignment_id):
-    if current_user.role != 'student':
-        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới lưu được bài làm.'}), 403
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    if assignment.class_id not in [item.id for item in current_user.enrolled_classes]:
-        return jsonify({'success': False, 'message': 'Bạn không thuộc lớp được giao bài này.'}), 403
+    assignment = g.assignment
 
     data = request.get_json() or {}
     answers = data.get('answers', {})
@@ -2476,7 +2844,7 @@ def api_student_autosave_assignment(assignment_id):
     if not attempt:
         return jsonify({'success': False, 'message': 'Phiên làm bài đã kết thúc hoặc không tồn tại.'}), 409
 
-    now = datetime.now()
+    now = app_now()
     if attempt.expires_at and now > attempt.expires_at:
         saved_answers = json.loads(attempt.answers_json or '{}')
         submission = save_attempt_submission(
@@ -2507,95 +2875,100 @@ def api_student_autosave_assignment(assignment_id):
 
 
 @app.route('/api/student/assignments/<int:assignment_id>/submit', methods=['POST'])
-@login_required
+@student_can_access_assignment
+@rate_limit(6, 60, 'assignment-submit')
 def api_student_submit_assignment(assignment_id):
-    if current_user.role != 'student':
-        return jsonify({'success': False, 'message': 'Chỉ sinh viên mới nộp được bài.'})
-
-    assignment = Assignment.query.get_or_404(assignment_id)
-    enrolled_class_ids = [item.id for item in current_user.enrolled_classes]
-    if assignment.class_id not in enrolled_class_ids:
-        return jsonify({'success': False, 'message': 'Bạn không thuộc lớp được giao bài này.'}), 403
+    assignment = g.assignment
 
     data = request.get_json() or {}
     answers = data.get('answers', {})
     if not isinstance(answers, dict):
         return jsonify({'success': False, 'message': 'Dữ liệu đáp án không hợp lệ.'})
 
-    now = datetime.now()
+    now = app_now()
     if not assignment.is_active:
         return jsonify({'success': False, 'message': 'Bài làm đã bị đóng hoặc thu hồi.'})
     if assignment.opens_at and now < assignment.opens_at:
         return jsonify({'success': False, 'message': 'Bài làm chưa đến thời gian mở.'})
 
-    existing_submission = Submission.query.filter_by(
-        assignment_id=assignment.id,
-        student_id=current_user.id
-    ).first()
-    if existing_submission and not assignment.allow_retry:
-        return jsonify({'success': False, 'message': 'Bạn đã nộp bài này rồi.'})
-
     attempt_id = data.get('attempt_id')
+    submission_token = str(data.get('submission_token') or '').strip()
     try:
         attempt_id = int(attempt_id)
     except (TypeError, ValueError):
         attempt_id = None
 
-    attempt = None
-    if attempt_id:
-        attempt = AssignmentAttempt.query.filter_by(
-            id=attempt_id,
-            assignment_id=assignment.id,
-            student_id=current_user.id,
-            is_completed=False
-        ).first()
-    if not attempt:
-        attempt = (
-            AssignmentAttempt.query
-            .filter_by(assignment_id=assignment.id, student_id=current_user.id, is_completed=False)
-            .order_by(AssignmentAttempt.id.desc())
-            .first()
-        )
+    if not attempt_id or not submission_token:
+        return jsonify({'success': False, 'message': 'Thiếu mã xác nhận phiên nộp bài.'}), 400
+
+    attempt = AssignmentAttempt.query.filter_by(
+        id=attempt_id,
+        assignment_id=assignment.id,
+        student_id=current_user.id
+    ).first()
     if not attempt:
         return jsonify({'success': False, 'message': 'Không tìm thấy phiên làm bài đang hoạt động.'})
 
-    effective_deadline = attempt.expires_at
-    if assignment.due_at and (effective_deadline is None or assignment.due_at < effective_deadline):
-        effective_deadline = assignment.due_at
-    if effective_deadline and now > effective_deadline + timedelta(seconds=10):
-        saved_answers = json.loads(attempt.answers_json or '{}')
+    if not attempt.submission_token or not secrets.compare_digest(attempt.submission_token, submission_token):
+        return jsonify({'success': False, 'message': 'Mã xác nhận phiên nộp bài không hợp lệ.'}), 403
+
+    with get_submission_lock(attempt.id):
+        db.session.expire_all()
+        attempt = AssignmentAttempt.query.filter_by(
+            id=attempt_id,
+            assignment_id=assignment.id,
+            student_id=current_user.id
+        ).first()
+        if attempt.is_completed:
+            if attempt.submission_response_json:
+                response_data = json.loads(attempt.submission_response_json)
+            else:
+                recorded_submission = Submission.query.filter_by(
+                    assignment_id=assignment.id,
+                    student_id=current_user.id
+                ).first()
+                response_data = {
+                    'success': True,
+                    'message': 'Bài đã được nộp trước đó.',
+                    'score': attempt.score,
+                    'recorded_score': recorded_submission.score if recorded_submission else attempt.score,
+                    'correct_count': attempt.correct_count,
+                    'total_questions': attempt.total_questions
+                }
+            response_data['duplicate'] = True
+            return jsonify(response_data)
+
+        existing_submission = Submission.query.filter_by(
+            assignment_id=assignment.id,
+            student_id=current_user.id
+        ).first()
+        if existing_submission and not assignment.allow_retry:
+            return jsonify({'success': False, 'message': 'Bạn đã nộp bài này rồi.'}), 409
+
+        effective_deadline = attempt.expires_at
+        if assignment.due_at and (effective_deadline is None or assignment.due_at < effective_deadline):
+            effective_deadline = assignment.due_at
+        timed_out = bool(effective_deadline and now > effective_deadline + timedelta(seconds=10))
+        submitted_answers = json.loads(attempt.answers_json or '{}') if timed_out else answers
         submission = save_attempt_submission(
             assignment,
             attempt,
             current_user.id,
-            saved_answers,
-            completion_reason='timeout'
+            submitted_answers,
+            completion_reason='timeout' if timed_out else 'submitted'
         )
-        return jsonify({
+        response_data = {
             'success': True,
-            'timed_out': True,
-            'message': 'Đã hết thời gian. Hệ thống tự động nộp bài.',
+            'timed_out': timed_out,
+            'message': 'Đã hết thời gian. Hệ thống tự động nộp bài.' if timed_out else 'Đã nộp bài.',
             'score': attempt.score,
             'recorded_score': submission.score,
             'correct_count': attempt.correct_count,
             'total_questions': attempt.total_questions
-        })
-
-    submission = save_attempt_submission(
-        assignment,
-        attempt,
-        current_user.id,
-        answers,
-        completion_reason='submitted'
-    )
-    return jsonify({
-        'success': True,
-        'message': 'Đã nộp bài.',
-        'score': attempt.score,
-        'recorded_score': submission.score,
-        'correct_count': attempt.correct_count,
-        'total_questions': attempt.total_questions
-    })
+        }
+        attempt.submission_response_json = json.dumps(response_data, ensure_ascii=False)
+        db.session.commit()
+        return jsonify(response_data)
 
 def serialize_exam_template(template, include_content=False):
     data = {
@@ -2976,4 +3349,8 @@ def download_sample(filename):
         return redirect(url_for('teacher_dashboard'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(
+        host=os.getenv('APP_HOST', '127.0.0.1'),
+        port=int(os.getenv('APP_PORT', '5000')),
+        debug=os.getenv('FLASK_DEBUG', '0') == '1'
+    )

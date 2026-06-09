@@ -33,23 +33,27 @@
 
             <div class="list-group list-group-flush nav nav-pills" role="tablist">
                 <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2 active"
-                    data-bs-toggle="pill" href="#tab-home" role="tab">
+                    data-student-tab="tab-home" href="#tab-home" role="tab">
                     <i class="fa-solid fa-angle-right me-2 small"></i> Trang chủ tổng hợp
                 </a>
                 <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2"
-                    data-bs-toggle="pill" href="#tab-my-classes" role="tab">
+                    data-student-tab="tab-my-classes" href="#tab-my-classes" role="tab">
                     <i class="fa-solid fa-angle-right me-2 small"></i> Lớp học của bạn
                 </a>
                 <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2"
-                    data-bs-toggle="pill" href="#tab-roadmap" role="tab">
+                    data-student-tab="tab-roadmap" href="#tab-roadmap" role="tab">
                     <i class="fa-solid fa-angle-right me-2 small"></i> Khai thác học liệu
                 </a>
                 <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2"
-                    data-bs-toggle="pill" href="#tab-practice" role="tab">
+                    data-student-tab="tab-practice" href="#tab-practice" role="tab">
                     <i class="fa-solid fa-angle-right me-2 small"></i> Thi & Luyện thi
                 </a>
                 <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2"
-                    data-bs-toggle="pill" href="#tab-notifications" role="tab">
+                    data-student-tab="tab-achievements" href="#tab-achievements" role="tab">
+                    <i class="fa-solid fa-angle-right me-2 small"></i> Thành tựu
+                </a>
+                <a class="list-group-item list-group-item-action bg-transparent border-0 text-primary fw-medium py-2 px-0 mb-2"
+                    data-student-tab="tab-notifications" href="#tab-notifications" role="tab">
                     <i class="fa-solid fa-angle-right me-2 small"></i> Thông báo
                     <span id="notificationUnreadBadge" class="badge bg-danger rounded-pill ms-1 d-none">0</span>
                 </a>
@@ -94,6 +98,30 @@
                                 <img src="https://cdn-icons-png.flaticon.com/512/3135/3135810.png" alt="Icon" width="60"
                                     class="mb-3">
                                 <h6 class="fw-bold text-uppercase mb-0 text-body">Thi & Luyện thi</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer"
+                            onclick="switchToTab('tab-achievements')" role="button" tabindex="0">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center">
+                                <div class="d-flex align-items-center justify-content-center rounded-circle bg-warning-subtle text-warning mb-3"
+                                    style="width: 64px; height: 64px;">
+                                    <i class="fa-solid fa-trophy fs-2"></i>
+                                </div>
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Thành tựu</h6>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <div class="card h-100 border-0 shadow-sm rounded-4 text-center daymai-grid-card bg-body cursor-pointer"
+                            onclick="switchToTab('tab-notifications')" role="button" tabindex="0">
+                            <div class="card-body p-4 p-md-5 d-flex flex-column justify-content-center align-items-center">
+                                <div class="d-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger mb-3"
+                                    style="width: 64px; height: 64px;">
+                                    <i class="fa-solid fa-bell fs-2"></i>
+                                </div>
+                                <h6 class="fw-bold text-uppercase mb-0 text-body">Thông báo</h6>
                             </div>
                         </div>
                     </div>
@@ -210,6 +238,55 @@
                     <div class="list-group-item border-0 p-5 text-center text-muted">Đang tải thông báo...</div>
                 </div>
             </div>
+            <div class="tab-pane fade" id="tab-achievements" role="tabpanel">
+                <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+                    <div>
+                        <h4 class="fw-bold text-primary mb-1"><i class="fa-solid fa-trophy me-2 text-warning"></i>Thành tựu học tập</h4>
+                        <p class="text-muted small mb-0">Huy hiệu được mở khóa tự động theo tiến độ thực tế.</p>
+                    </div>
+                    <div class="d-flex gap-4 text-end">
+                        <div>
+                            <div class="fs-4 fw-bold text-primary">{{ badge_progress.class_count }}</div>
+                            <div class="small text-muted">Lớp đã tham gia</div>
+                        </div>
+                        <div>
+                            <div class="fs-4 fw-bold text-success">{{ badge_progress.assignment_count }}</div>
+                            <div class="small text-muted">Bài đã hoàn thành</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-3">
+                    {% for badge in badge_progress['items'] %}
+                    <div class="col-md-6">
+                        <div class="card border h-100 rounded-3 {{ 'border-success bg-success-subtle' if badge.unlocked else 'bg-body opacity-75' }}">
+                            <div class="card-body p-4">
+                                <div class="d-flex align-items-start gap-3">
+                                    <div class="d-flex align-items-center justify-content-center rounded-circle bg-body shadow-sm flex-shrink-0"
+                                        style="width: 54px; height: 54px;">
+                                        <i class="fa-solid {{ badge.icon }} {{ badge.color if badge.unlocked else 'text-secondary' }} fs-4"></i>
+                                    </div>
+                                    <div class="flex-grow-1 min-w-0">
+                                        <div class="d-flex justify-content-between align-items-start gap-2">
+                                            <h6 class="fw-bold text-body mb-1">{{ badge.name }}</h6>
+                                            <span class="badge {{ 'bg-success' if badge.unlocked else 'bg-secondary' }} rounded-pill">
+                                                {{ 'Đã mở khóa' if badge.unlocked else 'Chưa đạt' }}
+                                            </span>
+                                        </div>
+                                        <p class="small text-muted mb-3">{{ badge.description }}</p>
+                                        <div class="progress" role="progressbar" aria-valuenow="{{ badge.progress_percent }}" aria-valuemin="0" aria-valuemax="100" style="height: 7px;">
+                                            <div class="progress-bar {{ 'bg-success' if badge.unlocked else 'bg-primary' }}" style="width: {{ badge.progress_percent }}%"></div>
+                                        </div>
+                                        <div class="small text-muted mt-2">
+                                            Tiến độ: {{ badge.current }}/{{ badge.target }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -272,6 +349,7 @@
                 <form id="takeAssignmentForm" onsubmit="event.preventDefault(); submitStudentAssignment();">
                     <input type="hidden" id="activeAssignmentId">
                     <input type="hidden" id="activeAttemptId">
+                    <input type="hidden" id="activeSubmissionToken">
                     <div id="takeAssignmentQuestions" class="d-flex flex-column gap-3">
                         <div class="text-center text-muted py-5">
                             <i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i>
@@ -323,17 +401,20 @@
 </style>
 
 <script>
-    // Sửa lỗi logic chuyển tab: dùng trực tiếp tabId thay vì nối chuỗi sai cách
     function switchToTab(tabId) {
-        document.querySelectorAll('.list-group-item').forEach(el => el.classList.remove('active'));
-        const sidebarLink = document.querySelector(`.list-group-item[href="#${tabId}"]`);
-        if (sidebarLink) sidebarLink.classList.add('active');
+        const targetPane = document.getElementById(tabId);
+        if (!targetPane) return;
 
-        const tabTriggerEl = document.querySelector(`a[href="#${tabId}"]`);
-        if (tabTriggerEl) {
-            const tab = new bootstrap.Tab(tabTriggerEl);
-            tab.show();
-        }
+        document.querySelectorAll('#studentTabContent > .tab-pane').forEach((pane) => {
+            pane.classList.remove('show', 'active');
+        });
+        targetPane.classList.add('show', 'active');
+
+        document.querySelectorAll('[data-student-tab]').forEach((link) => {
+            const isActive = link.dataset.studentTab === tabId;
+            link.classList.toggle('active', isActive);
+            link.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
 
         if (tabId === 'tab-practice') {
             loadStudentAssignments();
@@ -553,6 +634,7 @@
         assignmentAutoSubmitting = false;
         document.getElementById('activeAssignmentId').value = assignmentId;
         document.getElementById('activeAttemptId').value = '';
+        document.getElementById('activeSubmissionToken').value = '';
         document.getElementById('takeAssignmentTitle').innerHTML = '<i class="fa-solid fa-file-pen me-2"></i>Làm bài tập';
         document.getElementById('takeAssignmentMeta').textContent = 'Đang tải...';
         document.getElementById('takeAssignmentAlert').className = 'alert d-none border-0 rounded-3 small';
@@ -584,6 +666,7 @@
                 document.getElementById('takeAssignmentTitle').innerHTML = `<i class="fa-solid fa-file-pen me-2"></i>${escapeHtml(assignment.title)}`;
                 document.getElementById('takeAssignmentMeta').textContent = `${assignment.class_name} • ${assignment.total_questions} câu${attempt ? ` • Lần ${attempt.attempt_number}` : ''}`;
                 document.getElementById('activeAttemptId').value = attempt ? attempt.id : '';
+                document.getElementById('activeSubmissionToken').value = attempt ? attempt.submission_token : '';
 
                 if (!canSubmit) {
                     document.getElementById('btnSubmitStudentAssignment').classList.add('d-none');
@@ -647,6 +730,7 @@
     function submitStudentAssignment(autoSubmit = false) {
         const assignmentId = document.getElementById('activeAssignmentId').value;
         const attemptId = document.getElementById('activeAttemptId').value;
+        const submissionToken = document.getElementById('activeSubmissionToken').value;
         const answers = collectAssignmentAnswers();
 
         const unanswered = Object.values(answers).filter(value => !value).length;
@@ -662,7 +746,7 @@
         fetch(`/api/student/assignments/${assignmentId}/submit`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answers, attempt_id: attemptId })
+            body: JSON.stringify({ answers, attempt_id: attemptId, submission_token: submissionToken })
         })
             .then(res => res.json())
             .then(data => {
@@ -677,6 +761,7 @@
                 stopAssignmentTimer();
                 clearTimeout(assignmentAutosaveTimer);
                 document.getElementById('activeAttemptId').value = '';
+                document.getElementById('activeSubmissionToken').value = '';
                 setAssignmentSaveStatus('saved', 'Đã nộp và lưu bài');
                 btn.classList.add('d-none');
                 document.querySelectorAll('#takeAssignmentQuestions input[type="radio"]').forEach(input => input.disabled = true);
@@ -731,6 +816,7 @@
             body: JSON.stringify({ notification_id: notificationId })
         }).finally(() => {
             if (link === '#tab-practice') switchToTab('tab-practice');
+            else if (link === '#tab-achievements') switchToTab('tab-achievements');
             loadStudentNotifications();
         });
     }
@@ -778,6 +864,20 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('[data-student-tab]').forEach((link) => {
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                switchToTab(link.dataset.studentTab);
+            });
+        });
+        document.querySelectorAll('#tab-home [role="button"]').forEach((card) => {
+            card.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    card.click();
+                }
+            });
+        });
         loadStudentAssignments();
         loadStudentNotifications();
         document.getElementById('takeAssignmentModal').addEventListener('hidden.bs.modal', () => {
