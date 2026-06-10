@@ -10,9 +10,23 @@
                 </div>
                 <h4 class="fw-bold mb-1">{{ user.username }}</h4>
                 <span class="badge bg-primary mb-3">
-                    {{ 'Sinh viên Bách Khoa' if user.role == 'student' else 'Giảng viên' }}
+                    {{ 'Sinh viên' if user.role == 'student' else 'Giảng viên' }}
                 </span>
                 <ul class="list-group list-group-flush text-start mt-3">
+                    {% if user.role == 'student' %}
+                    <li class="list-group-item px-0">
+                        <span class="text-muted d-block small"><i class="fa-solid fa-id-card me-2"></i>Mã số sinh viên</span>
+                        <strong>{{ user.student_code or 'Chưa cập nhật' }}</strong>
+                    </li>
+                    <li class="list-group-item px-0">
+                        <span class="text-muted d-block small"><i class="fa-solid fa-school me-2"></i>Trường</span>
+                        <strong>{{ user.school_name or 'Chưa cập nhật' }}</strong>
+                    </li>
+                    <li class="list-group-item px-0">
+                        <span class="text-muted d-block small"><i class="fa-solid fa-book-open me-2"></i>Ngành</span>
+                        <strong>{{ user.major or 'Chưa cập nhật' }}</strong>
+                    </li>
+                    {% endif %}
                     <li class="list-group-item d-flex justify-content-between align-items-center px-0">
                         <span class="text-muted"><i class="fa-solid fa-calendar-days me-2"></i>Ngày gia nhập</span>
                         <strong>Hôm nay</strong>
@@ -26,11 +40,78 @@
         </div>
 
         <div class="col-md-8">
-            <div class="card shadow-sm border-0 rounded-3 p-4 h-100">
+            <div class="card shadow-sm border-0 rounded-3 p-4 mb-4">
+                <h4 class="fw-bold text-primary border-bottom pb-3 mb-4">
+                    <i class="fa-solid fa-user-pen me-2"></i>Chỉnh sửa thông tin
+                </h4>
+                <form method="POST" action="{{ url_for('update_profile') }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Tên đăng nhập</label>
+                            <input type="text" name="username" value="{{ user.username }}" minlength="3" maxlength="50"
+                                pattern="[a-z0-9._-]+" class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                        {% if user.role == 'student' %}
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Mã số sinh viên</label>
+                            <input type="text" name="student_code" value="{{ user.student_code or '' }}" minlength="5" maxlength="30"
+                                pattern="[A-Za-z0-9-]+" class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Trường</label>
+                            <input type="text" name="school_name" value="{{ user.school_name or '' }}" list="profileSchoolSuggestions"
+                                minlength="2" maxlength="200" class="form-control bg-body-tertiary border-0 py-2" required>
+                            <datalist id="profileSchoolSuggestions">
+                                <option value="Đại học Bách Khoa Hà Nội"></option>
+                            </datalist>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Ngành</label>
+                            <input type="text" name="major" value="{{ user.major or '' }}" minlength="2" maxlength="150"
+                                class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <button type="submit" class="btn btn-primary rounded-pill fw-bold px-4 mt-4">
+                        <i class="fa-solid fa-floppy-disk me-2"></i>Lưu thông tin
+                    </button>
+                </form>
+            </div>
+
+            <div class="card shadow-sm border-0 rounded-3 p-4 mb-4">
+                <h4 class="fw-bold text-primary border-bottom pb-3 mb-4">
+                    <i class="fa-solid fa-key me-2"></i>Đổi mật khẩu
+                </h4>
+                <form method="POST" action="{{ url_for('change_password') }}">
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-bold">Mật khẩu hiện tại</label>
+                            <input type="password" name="current_password" autocomplete="current-password"
+                                class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Mật khẩu mới</label>
+                            <input type="password" name="new_password" minlength="8" maxlength="128" autocomplete="new-password"
+                                class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Nhập lại mật khẩu mới</label>
+                            <input type="password" name="confirm_password" minlength="8" maxlength="128" autocomplete="new-password"
+                                class="form-control bg-body-tertiary border-0 py-2" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-outline-primary rounded-pill fw-bold px-4 mt-4">
+                        <i class="fa-solid fa-key me-2"></i>Đổi mật khẩu
+                    </button>
+                </form>
+            </div>
+
+            <div class="card shadow-sm border-0 rounded-3 p-4">
                 <h4 class="fw-bold text-primary border-bottom pb-3 mb-4">
                     <i class="fa-solid fa-trophy me-2 text-warning"></i>Bộ Sưu Tập Thành Tựu
                 </h4>
-                
                 {% if user.badges %}
                     <div class="row g-3">
                         {% for badge in user.badges %}

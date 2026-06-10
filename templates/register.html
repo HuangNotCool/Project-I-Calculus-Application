@@ -47,37 +47,64 @@
             {% endif %}
         {% endwith %}
 
-        <form method="POST" action="/register">
+        <form method="POST" action="/register" id="registerForm">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div class="row g-4 mb-4">
                 
                 <div class="col-12">
-                    <label class="form-label fw-bold text-body">Tên đăng nhập / Mã SV <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3" name="username" placeholder="Nhập tên đăng nhập" required>
+                    <label class="form-label fw-bold text-body">Tên đăng nhập <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
+                        name="username" value="{{ form_data.username }}" minlength="3" maxlength="50"
+                        pattern="[a-z0-9._-]+" autocomplete="username" placeholder="VD: nguyen.van.a" required>
+                    <small class="text-muted">Dùng chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.</small>
                 </div>
 
                 <div class="col-md-6">
                     <label class="form-label fw-bold text-body">Mật khẩu mới <span class="text-danger">*</span></label>
                     <div class="input-group shadow-sm rounded-3 overflow-hidden border-0">
-                        <input type="password" class="form-control bg-body-tertiary text-body border-0 py-3 px-4" name="password" placeholder="Nhập vào mật khẩu" required>
-                        <span class="input-group-text bg-body-tertiary border-0 text-muted pe-3"><i class="fa-regular fa-eye-slash"></i></span>
+                        <input type="password" id="registerPassword" class="form-control bg-body-tertiary text-body border-0 py-3 px-4"
+                            name="password" minlength="8" maxlength="128" autocomplete="new-password"
+                            placeholder="Ít nhất 8 ký tự, có chữ và số" required>
+                        <button type="button" class="btn bg-body-tertiary border-0 text-muted pe-3" onclick="togglePassword('registerPassword', this)" title="Hiện hoặc ẩn mật khẩu">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
                     </div>
                 </div>
 
                 <div class="col-md-6">
                     <label class="form-label fw-bold text-body">Nhập lại mật khẩu <span class="text-danger">*</span></label>
                     <div class="input-group shadow-sm rounded-3 overflow-hidden border-0">
-                        <input type="password" class="form-control bg-body-tertiary text-body border-0 py-3 px-4" name="confirm_password" placeholder="Nhập lại mật khẩu" required>
-                        <span class="input-group-text bg-body-tertiary border-0 text-muted pe-3"><i class="fa-regular fa-eye-slash"></i></span>
+                        <input type="password" id="registerPasswordConfirm" class="form-control bg-body-tertiary text-body border-0 py-3 px-4"
+                            name="confirm_password" minlength="8" maxlength="128" autocomplete="new-password"
+                            placeholder="Nhập lại mật khẩu" required>
+                        <button type="button" class="btn bg-body-tertiary border-0 text-muted pe-3" onclick="togglePassword('registerPasswordConfirm', this)" title="Hiện hoặc ẩn mật khẩu">
+                            <i class="fa-regular fa-eye"></i>
+                        </button>
                     </div>
                 </div>
 
-                <div class="col-12 mt-4">
-                    <label class="form-label fw-bold text-body">Bạn là: <span class="text-danger">*</span></label>
-                    <select class="form-select bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3 fw-medium" name="role" required>
-                        <option value="student" selected>Sinh viên</option>
-                        <option value="teacher">Giáo viên (Demo)</option>
-                    </select>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-body">Mã số sinh viên <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
+                        name="student_code" value="{{ form_data.student_code }}" minlength="5" maxlength="30"
+                        pattern="[A-Za-z0-9-]+" placeholder="VD: 20237335" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-body">Tên trường <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
+                        name="school_name" value="{{ form_data.school_name }}" list="schoolSuggestions"
+                        minlength="2" maxlength="200" placeholder="Nhập hoặc chọn tên trường" required>
+                    <datalist id="schoolSuggestions">
+                        <option value="Đại học Bách Khoa Hà Nội"></option>
+                    </datalist>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-bold text-body">Tên ngành <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
+                        name="major" value="{{ form_data.major }}" minlength="2" maxlength="150"
+                        placeholder="VD: Khoa học máy tính" required>
                 </div>
 
             </div>
@@ -103,5 +130,34 @@
     [data-bs-theme="dark"] .form-control::placeholder { color: #8c9297 !important; }
 </style>
 
+<script>
+    function togglePassword(inputId, button) {
+        const input = document.getElementById(inputId);
+        const icon = button.querySelector('i');
+        const show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        icon.classList.toggle('fa-eye', !show);
+        icon.classList.toggle('fa-eye-slash', show);
+    }
+
+    document.getElementById('registerForm').addEventListener('submit', (event) => {
+        const password = document.getElementById('registerPassword');
+        const confirmPassword = document.getElementById('registerPasswordConfirm');
+        confirmPassword.setCustomValidity(
+            password.value === confirmPassword.value ? '' : 'Mật khẩu nhập lại không khớp.'
+        );
+        if (!event.currentTarget.checkValidity()) {
+            event.preventDefault();
+            event.currentTarget.reportValidity();
+        }
+    });
+
+    document.getElementById('registerPasswordConfirm').addEventListener('input', (event) => {
+        const password = document.getElementById('registerPassword').value;
+        event.currentTarget.setCustomValidity(
+            password === event.currentTarget.value ? '' : 'Mật khẩu nhập lại không khớp.'
+        );
+    });
+</script>
 
 {% endblock %}

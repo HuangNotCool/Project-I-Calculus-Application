@@ -24,8 +24,11 @@ user_badges = db.Table('user_badges',
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
-    password = db.Column(db.String(150), nullable=False)
+    password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False)
+    student_code = db.Column(db.String(50), unique=True)
+    school_name = db.Column(db.String(200))
+    major = db.Column(db.String(150))
     
     # Liên kết: Một user có thể có nhiều badge
     badges = db.relationship('Badge', secondary=user_badges, lazy='subquery',
@@ -44,10 +47,34 @@ class Class(db.Model):
     description = db.Column(db.String(200))
     code = db.Column(db.String(20), unique=True, nullable=False) # Mã HUST-XXXX
     teacher_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    join_policy = db.Column(db.String(20), default='open', nullable=False)
     
     # Quan hệ nhiều-nhiều với User (Lấy ra danh sách học sinh)
     students = db.relationship('User', secondary=student_classes, lazy='subquery',
         backref=db.backref('enrolled_classes', lazy=True))
+
+
+class ClassJoinRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    class_id = db.Column(db.Integer, db.ForeignKey('class.id'), nullable=False)
+    student_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending', nullable=False)
+    requested_at = db.Column(db.DateTime, default=app_now)
+    responded_at = db.Column(db.DateTime)
+
+    classroom = db.relationship(
+        'Class',
+        backref=db.backref('join_requests', lazy=True, cascade='all, delete-orphan')
+    )
+    student = db.relationship(
+        'User',
+        backref=db.backref('class_join_requests', lazy=True, cascade='all, delete-orphan')
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint('class_id', 'student_id', name='uq_class_join_request_student'),
+    )
+
 
 class Badge(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -97,7 +124,12 @@ class Assignment(db.Model):
     due_at = db.Column(db.DateTime)
     duration_minutes = db.Column(db.Integer)
     allow_retry = db.Column(db.Boolean, default=False)
+    max_attempts = db.Column(db.Integer, default=1)
+    retry_cooldown_minutes = db.Column(db.Integer, default=0)
     score_policy = db.Column(db.String(20), default='latest')
+    result_release_policy = db.Column(db.String(20), default='immediate')
+    results_published = db.Column(db.Boolean, default=False)
+    show_answers = db.Column(db.Boolean, default=False)
     shuffle_questions = db.Column(db.Boolean, default=False)
     shuffle_answers = db.Column(db.Boolean, default=False)
     version_hash = db.Column(db.String(64))

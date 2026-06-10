@@ -17,7 +17,10 @@
                 alt="Avatar" width="40" class="rounded-circle me-3">
             <div>
                 <h6 class="mb-0 fw-bold">{{ current_user.username }}</h6>
-                <small class="opacity-75">Học sinh</small>
+                <small class="opacity-75">
+                    {{ current_user.student_code or 'Sinh viên' }}
+                    {% if current_user.major %} • {{ current_user.major }}{% endif %}
+                </small>
             </div>
         </div>
     </div>
@@ -137,6 +140,23 @@
                     </button>
                 </div>
                 <div class="row g-4" id="myClassesList">
+                    {% for join_request in pending_join_requests %}
+                    <div class="col-md-6 col-lg-6 mb-2">
+                        <div class="card border border-warning-subtle shadow-sm rounded-4 h-100 bg-body">
+                            <div class="card-body p-4">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div class="rounded-circle bg-warning-subtle text-warning-emphasis d-flex align-items-center justify-content-center" style="width:55px;height:55px;">
+                                        <i class="fa-solid fa-user-clock fs-3"></i>
+                                    </div>
+                                    <span class="badge bg-warning text-dark rounded-pill">Chờ duyệt</span>
+                                </div>
+                                <h5 class="fw-bold mb-1">{{ join_request.classroom.name }}</h5>
+                                <div class="small text-muted mb-2">Mã lớp: {{ join_request.classroom.code }}</div>
+                                <p class="small text-muted mb-0">Giáo viên chưa duyệt yêu cầu tham gia của bạn.</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
                     {% for c in classes %}
                     <div class="col-md-6 col-lg-6 mb-2">
                         <div class="card border-0 shadow-sm rounded-4 h-100 daymai-grid-card bg-body">
@@ -159,6 +179,7 @@
                         </div>
                     </div>
                     {% else %}
+                    {% if not pending_join_requests %}
                     <div class="col-12 text-center py-5 bg-body rounded-4 shadow-sm">
                         <img src="https://cdn-icons-png.flaticon.com/512/7486/7486747.png" width="100"
                             class="mb-3 opacity-50">
@@ -170,6 +191,7 @@
                             Tham gia lớp ngay
                         </button>
                     </div>
+                    {% endif %}
                     {% endfor %}
                 </div>
             </div>
@@ -565,6 +587,8 @@
                         available: { text: 'Có thể làm', cls: 'bg-primary' },
                         in_progress: { text: 'Đang làm', cls: 'bg-warning text-dark' },
                         retry_available: { text: 'Có thể làm lại', cls: 'bg-info text-dark' },
+                        retry_cooldown: { text: 'Đang chờ lượt mới', cls: 'bg-warning text-dark' },
+                        attempts_exhausted: { text: 'Đã hết lượt', cls: 'bg-secondary' },
                         submitted: { text: 'Đã nộp', cls: 'bg-success' },
                         scheduled: { text: 'Chưa mở', cls: 'bg-warning text-dark' },
                         expired: { text: 'Đã hết hạn', cls: 'bg-secondary' },
@@ -572,9 +596,12 @@
                     };
                     const status = statusMap[assignment.availability] || statusMap.closed;
                     const submittedBadge = `<span class="badge ${status.cls} rounded-pill">${status.text}</span>`;
-                    const scoreText = assignment.submitted
+                    const scoreText = assignment.submitted && assignment.result_published
                         ? `<div class="fw-bold text-success mt-2">Điểm ghi nhận: ${assignment.score}/10 (${assignment.correct_count}/${assignment.total_questions})</div>
                            <div class="small text-muted">${(assignment.attempt_history || []).map((item) => `Lần ${item.attempt_number}: ${item.score}/10${item.is_selected ? ' (được tính)' : ''}`).join(' • ')}</div>`
+                        : assignment.submitted
+                        ? `<div class="fw-bold text-warning-emphasis mt-2">Đã nộp bài, kết quả chưa được công bố.</div>
+                           <div class="small text-muted">${assignment.attempt_count || 0} lượt đã hoàn thành${assignment.retry_cooldown_seconds ? ` • Có thể làm lại sau ${Math.ceil(assignment.retry_cooldown_seconds / 60)} phút` : ''}</div>`
                         : `<div class="small text-muted mt-2">Số câu: ${assignment.total_questions}</div>`;
                     const buttonText = assignment.availability === 'retry_available'
                         ? 'Làm lại'
@@ -671,7 +698,11 @@
                 if (!canSubmit) {
                     document.getElementById('btnSubmitStudentAssignment').classList.add('d-none');
                     if (submitted) {
-                        showTakeAssignmentAlert('success', `Bạn đã nộp bài này. Điểm: <strong>${submission.score}/10</strong> (${submission.correct_count}/${assignment.total_questions}).`);
+                        if (submission.result_published) {
+                            showTakeAssignmentAlert('success', `Bạn đã nộp bài này. Điểm: <strong>${submission.score}/10</strong> (${submission.correct_count}/${assignment.total_questions}).`);
+                        } else {
+                            showTakeAssignmentAlert('info', 'Bài đã được ghi nhận. Kết quả chưa được giáo viên công bố.');
+                        }
                     } else if (assignment.availability === 'scheduled') {
                         showTakeAssignmentAlert('warning', `Bài chưa mở. Thời gian mở: <strong>${escapeHtml(assignment.opens_at)}</strong>.`);
                     } else {
@@ -698,10 +729,12 @@
                         const inputId = `assignment-${assignment.id}-q${qIndex}-${choice.letter}`;
                         const checked = submittedAnswers[String(qIndex)] === choice.letter ? 'checked' : '';
                         const disabled = canSubmit ? '' : 'disabled';
+                        const isCorrect = !canSubmit && submission.answers_visible && submission.answer_key?.[qIndex] === choice.letter;
+                        const resultClass = isCorrect ? ' bg-success-subtle border-success' : '';
                         return `
-                            <label class="list-group-item border-0 border-bottom bg-body d-flex gap-2 align-items-start py-3" for="${inputId}">
+                            <label class="list-group-item border-0 border-bottom bg-body d-flex gap-2 align-items-start py-3${resultClass}" for="${inputId}">
                                 <input class="form-check-input mt-1" type="radio" name="question-${qIndex}" id="${inputId}" value="${choice.letter}" ${checked} ${disabled}>
-                                <span><strong>${choice.letter}.</strong> ${escapeHtml(choice.content)}</span>
+                                <span><strong>${choice.letter}.</strong> ${escapeHtml(choice.content)}${isCorrect ? ' <span class="badge bg-success ms-2">Đáp án đúng</span>' : ''}</span>
                             </label>`;
                     }).join('');
 
@@ -754,10 +787,14 @@
                     showTakeAssignmentAlert('danger', escapeHtml(data.message || 'Không nộp được bài.'));
                     return;
                 }
-                const recordedText = data.recorded_score !== undefined && Number(data.recorded_score) !== Number(data.score)
-                    ? ` Điểm được ghi nhận hiện tại: <strong>${data.recorded_score}/10</strong>.`
-                    : '';
-                showTakeAssignmentAlert('success', `Đã nộp bài. Điểm lượt này: <strong>${data.score}/10</strong> (${data.correct_count}/${data.total_questions}).${recordedText}`);
+                if (data.result_published) {
+                    const recordedText = data.recorded_score !== undefined && data.recorded_score !== null && Number(data.recorded_score) !== Number(data.score)
+                        ? ` Điểm được ghi nhận hiện tại: <strong>${data.recorded_score}/10</strong>.`
+                        : '';
+                    showTakeAssignmentAlert('success', `Đã nộp bài. Điểm lượt này: <strong>${data.score}/10</strong> (${data.correct_count}/${data.total_questions}).${recordedText}`);
+                } else {
+                    showTakeAssignmentAlert('success', 'Đã nộp và lưu bài. Kết quả sẽ hiển thị khi giáo viên công bố.');
+                }
                 stopAssignmentTimer();
                 clearTimeout(assignmentAutosaveTimer);
                 document.getElementById('activeAttemptId').value = '';
@@ -850,7 +887,8 @@
                 btn.disabled = false;
                 if (data.success) {
                     successAlert.classList.remove('d-none');
-                    setTimeout(() => { location.reload(); }, 1000);
+                    successAlert.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i><strong>${data.pending ? 'Đã gửi yêu cầu!' : 'Tham gia thành công!'}</strong> ${escapeHtml(data.message || '')}`;
+                    setTimeout(() => { location.reload(); }, data.pending ? 1500 : 900);
                 } else {
                     document.getElementById('joinErrorMsg').innerText = data.message;
                     errorAlert.classList.remove('d-none');

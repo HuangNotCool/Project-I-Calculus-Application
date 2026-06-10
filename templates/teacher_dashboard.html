@@ -101,11 +101,23 @@
                                 <h4 class="fw-bold text-body mb-1">{{ c.name }}</h4>
                                 <p class="text-muted mb-3"><i class="fa-regular fa-clock me-1"></i> {{ c.description if
                                     c.description else 'Không có mô tả' }}</p>
+                                <div class="mb-3">
+                                    <label class="small fw-bold text-muted mb-1">Cách tham gia lớp</label>
+                                    <select class="form-select form-select-sm bg-body-tertiary border-0"
+                                        onchange="updateClassJoinPolicy({{ c.id }}, this.value)">
+                                        <option value="open" {{ 'selected' if (c.join_policy or 'open') == 'open' else '' }}>Vào ngay khi có mã</option>
+                                        <option value="approval" {{ 'selected' if c.join_policy == 'approval' else '' }}>Phải được giáo viên duyệt</option>
+                                    </select>
+                                </div>
 
                                 <div class="d-flex align-items-center text-body mb-4 bg-body-tertiary p-2 rounded-3">
                                     <i class="fa-solid fa-users text-primary me-2 ms-2"></i> <span
                                         class="fw-bold me-1 text-success">{{ c.students|length if c.students else 0
                                         }}</span> Sinh viên đã tham gia
+                                    {% set pending_count = c.join_requests|selectattr('status', 'equalto', 'pending')|list|length %}
+                                    {% if pending_count %}
+                                    <span class="badge bg-warning text-dark ms-auto">{{ pending_count }} chờ duyệt</span>
+                                    {% endif %}
                                 </div>
 
                                 <div class="d-flex gap-2 mt-auto">
@@ -434,6 +446,13 @@
                         </div>
                         <small class="text-muted mt-2 d-block"><i class="fa-solid fa-circle-info me-1"></i> Học sinh sẽ nhập mã này ở trang chủ để xin tham gia vào lớp của bạn.</small>
                     </div>
+                    <div class="mt-4">
+                        <label class="form-label fw-bold text-body">Cách sinh viên tham gia</label>
+                        <select name="join_policy" class="form-select bg-body-tertiary border-0 px-3 py-2 rounded-3">
+                            <option value="open">Vào ngay nếu có đúng mã lớp</option>
+                            <option value="approval">Gửi yêu cầu và chờ giáo viên duyệt</option>
+                        </select>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer border-top-0 px-4 pb-4 pt-0">
@@ -457,6 +476,11 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4 bg-body-tertiary mt-3 rounded-bottom-4">
+                <div id="pendingJoinRequestSection" class="mb-4 d-none">
+                    <h6 class="fw-bold text-warning-emphasis mb-2"><i class="fa-solid fa-user-clock me-2"></i>Yêu cầu đang chờ</h6>
+                    <div class="list-group shadow-sm border-0 rounded-4 overflow-hidden" id="pendingJoinRequestList"></div>
+                </div>
+                <h6 class="fw-bold text-primary mb-2"><i class="fa-solid fa-users me-2"></i>Thành viên lớp</h6>
                 <div class="list-group shadow-sm border-0 rounded-4 overflow-hidden" id="studentListContainer">
                     <div class="text-center py-5">
                         <i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i>
@@ -532,11 +556,30 @@
                                             <option value="first">Lượt đầu tiên</option>
                                         </select>
                                     </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Số lần làm tối đa</label>
+                                        <input type="number" min="1" id="assignMaxAttempts" value="1" class="form-control bg-body border-0 rounded-3 py-2" placeholder="Để trống = không giới hạn">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label fw-bold">Chờ giữa các lượt</label>
+                                        <div class="input-group">
+                                            <input type="number" min="0" id="assignRetryCooldown" value="0" class="form-control bg-body border-0 rounded-start-3 py-2">
+                                            <span class="input-group-text bg-body border-0">phút</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label fw-bold">Công bố kết quả</label>
+                                        <select id="assignResultReleasePolicy" class="form-select bg-body border-0 rounded-3 py-2">
+                                            <option value="immediate">Ngay sau khi nộp</option>
+                                            <option value="after_due">Sau hạn đóng đề</option>
+                                            <option value="manual">Giáo viên công bố thủ công</option>
+                                        </select>
+                                    </div>
                                 </div>
                                 <div class="bg-body rounded-3 p-3 mb-3">
                                     <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="assignAllowRetry">
-                                        <label class="form-check-label fw-bold" for="assignAllowRetry">Cho phép làm lại</label>
+                                        <input class="form-check-input" type="checkbox" id="assignShowAnswers">
+                                        <label class="form-check-label fw-bold" for="assignShowAnswers">Cho xem đáp án đúng sau khi công bố điểm</label>
                                     </div>
                                     <div class="form-check form-switch mb-2">
                                         <input class="form-check-input" type="checkbox" id="assignShuffleQuestions">
@@ -667,11 +710,34 @@
                             <option value="first">Lượt đầu tiên</option>
                         </select>
                     </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Số lần làm tối đa</label>
+                        <input type="number" min="1" id="manageAssignmentMaxAttempts" class="form-control bg-body-tertiary border-0 rounded-3 py-2" placeholder="Để trống = không giới hạn">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-bold">Chờ giữa các lượt</label>
+                        <div class="input-group">
+                            <input type="number" min="0" id="manageAssignmentRetryCooldown" class="form-control bg-body-tertiary border-0">
+                            <span class="input-group-text bg-body-tertiary border-0">phút</span>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">Công bố kết quả</label>
+                        <select id="manageAssignmentResultReleasePolicy" class="form-select bg-body-tertiary border-0 rounded-3 py-2">
+                            <option value="immediate">Ngay sau khi nộp</option>
+                            <option value="after_due">Sau hạn đóng đề</option>
+                            <option value="manual">Giáo viên công bố thủ công</option>
+                        </select>
+                    </div>
                     <div class="col-12">
                         <div class="bg-body-tertiary rounded-3 p-3">
                             <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" id="manageAssignmentAllowRetry">
-                                <label class="form-check-label fw-bold" for="manageAssignmentAllowRetry">Cho phép làm lại</label>
+                                <input class="form-check-input" type="checkbox" id="manageAssignmentResultsPublished">
+                                <label class="form-check-label fw-bold" for="manageAssignmentResultsPublished">Đã công bố kết quả thủ công</label>
+                            </div>
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" id="manageAssignmentShowAnswers">
+                                <label class="form-check-label fw-bold" for="manageAssignmentShowAnswers">Cho xem đáp án đúng sau khi công bố điểm</label>
                             </div>
                             <div class="form-check form-switch mb-2">
                                 <input class="form-check-input" type="checkbox" id="manageAssignmentShuffleQuestions">
@@ -936,8 +1002,27 @@
         }
     }
 
+    function updateClassJoinPolicy(classId, joinPolicy) {
+        fetch(`/api/teacher/class/${classId}/join-policy`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ join_policy: joinPolicy })
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không cập nhật được chế độ tham gia lớp.');
+                    location.reload();
+                }
+            })
+            .catch(() => {
+                alert('Lỗi kết nối khi cập nhật chế độ tham gia lớp.');
+                location.reload();
+            });
+    }
+
     function viewClassStudents(classId) {
-        const modal = new bootstrap.Modal(document.getElementById('studentListModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('studentListModal'));
         document.getElementById('modalClassName').innerText = "Đang tải dữ liệu...";
         document.getElementById('studentListContainer').innerHTML = `<div class="text-center py-5 bg-body"><i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i><p class="mt-2 text-muted fw-bold">Đang tải dữ liệu sinh viên...</p></div>`;
         modal.show();
@@ -946,16 +1031,65 @@
                 if (data.success) {
                     document.getElementById('modalClassName').innerHTML = `Lớp: <strong>${data.class_name}</strong> | Mã: <strong class="text-success">${data.class_code}</strong>`;
                     const listContainer = document.getElementById('studentListContainer');
+                    const pendingSection = document.getElementById('pendingJoinRequestSection');
+                    const pendingList = document.getElementById('pendingJoinRequestList');
+                    const pendingRequests = data.pending_requests || [];
+                    pendingSection.classList.toggle('d-none', !pendingRequests.length);
+                    pendingList.innerHTML = pendingRequests.map((request) => {
+                        const profileLine = [request.student_code ? `Mã SV: ${request.student_code}` : '', request.major || '', request.school_name || '']
+                            .filter(Boolean)
+                            .map(escapeHtml)
+                            .join(' • ');
+                        return `
+                            <div class="list-group-item border-0 border-bottom p-3 bg-body">
+                                <div class="d-flex justify-content-between align-items-center gap-3">
+                                    <div>
+                                        <div class="fw-bold">${escapeHtml(request.username)}</div>
+                                        <div class="small text-muted">${profileLine}</div>
+                                        <div class="small text-muted">Gửi lúc ${escapeHtml(request.requested_at)}</div>
+                                    </div>
+                                    <div class="d-flex gap-2 flex-shrink-0">
+                                        <button class="btn btn-sm btn-success rounded-pill fw-bold" onclick="reviewClassJoinRequest(${classId}, ${request.id}, 'approve')">Duyệt</button>
+                                        <button class="btn btn-sm btn-outline-danger rounded-pill fw-bold" onclick="reviewClassJoinRequest(${classId}, ${request.id}, 'reject')">Từ chối</button>
+                                    </div>
+                                </div>
+                            </div>`;
+                    }).join('');
                     listContainer.innerHTML = '';
                     if (data.students.length === 0) {
                         listContainer.innerHTML = `<div class="text-center py-5 bg-body"><i class="fa-solid fa-ghost fs-1 text-muted opacity-50 mb-3"></i><h6 class="fw-bold text-muted">Chưa có sinh viên nào tham gia</h6><p class="small text-muted mb-0">Hãy chia sẻ mã lớp ${data.class_code} cho học sinh nhé!</p></div>`;
                         return;
                     }
                     data.students.forEach((student, index) => {
-                        listContainer.insertAdjacentHTML('beforeend', `<div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center justify-content-between feature-card-hover"><div class="d-flex align-items-center"><span class="fw-bold text-muted me-3 w-25px">${index + 1}.</span><img src="https://ui-avatars.com/api/?name=${student.username}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm"><div><h6 class="fw-bold mb-0 text-body">${student.username}</h6><small class="text-muted">Mã SV: 202${Math.floor(Math.random() * 90000) + 10000}</small></div></div></div>`);
+                        const profileLine = [student.student_code ? `Mã SV: ${student.student_code}` : '', student.major || '', student.school_name || '']
+                            .filter(Boolean)
+                            .map(escapeHtml)
+                            .join(' • ');
+                        listContainer.insertAdjacentHTML('beforeend', `
+                            <div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center feature-card-hover">
+                                <span class="fw-bold text-muted me-3">${index + 1}.</span>
+                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(student.username)}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm" alt="">
+                                <div>
+                                    <h6 class="fw-bold mb-0 text-body">${escapeHtml(student.username)}</h6>
+                                    <small class="text-muted">${profileLine || 'Chưa cập nhật thông tin sinh viên'}</small>
+                                </div>
+                            </div>`);
                     });
                 } else { alert("Lỗi: " + data.message); modal.hide(); }
             }).catch(err => { alert("Lỗi kết nối!"); modal.hide(); });
+    }
+
+    function reviewClassJoinRequest(classId, requestId, action) {
+        fetch(`/api/teacher/class/${classId}/join-requests/${requestId}/${action}`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    alert(data.message || 'Không xử lý được yêu cầu.');
+                    return;
+                }
+                viewClassStudents(classId);
+            })
+            .catch(() => alert('Lỗi kết nối khi xử lý yêu cầu.'));
     }
 
     let currentAssignClassId = null;
@@ -981,7 +1115,10 @@
         document.getElementById('assignDueAt').value = '';
         document.getElementById('assignDurationMinutes').value = '';
         document.getElementById('assignScorePolicy').value = 'latest';
-        document.getElementById('assignAllowRetry').checked = false;
+        document.getElementById('assignMaxAttempts').value = '1';
+        document.getElementById('assignRetryCooldown').value = '0';
+        document.getElementById('assignResultReleasePolicy').value = 'immediate';
+        document.getElementById('assignShowAnswers').checked = false;
         document.getElementById('assignShuffleQuestions').checked = false;
         document.getElementById('assignShuffleAnswers').checked = false;
         document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
@@ -1036,7 +1173,10 @@
         document.getElementById('assignDueAt').value = '';
         document.getElementById('assignDurationMinutes').value = '';
         document.getElementById('assignScorePolicy').value = 'latest';
-        document.getElementById('assignAllowRetry').checked = false;
+        document.getElementById('assignMaxAttempts').value = '1';
+        document.getElementById('assignRetryCooldown').value = '0';
+        document.getElementById('assignResultReleasePolicy').value = 'immediate';
+        document.getElementById('assignShowAnswers').checked = false;
         document.getElementById('assignShuffleQuestions').checked = false;
         document.getElementById('assignShuffleAnswers').checked = false;
         document.getElementById('assignExamAlert').className = 'alert d-none small border-0 rounded-3';
@@ -1567,8 +1707,11 @@
             opens_at: document.getElementById('assignOpensAt').value,
             due_at: document.getElementById('assignDueAt').value,
             duration_minutes: document.getElementById('assignDurationMinutes').value,
-            allow_retry: document.getElementById('assignAllowRetry').checked,
+            max_attempts: document.getElementById('assignMaxAttempts').value,
+            retry_cooldown_minutes: document.getElementById('assignRetryCooldown').value,
             score_policy: document.getElementById('assignScorePolicy').value,
+            result_release_policy: document.getElementById('assignResultReleasePolicy').value,
+            show_answers: document.getElementById('assignShowAnswers').checked,
             shuffle_questions: document.getElementById('assignShuffleQuestions').checked,
             shuffle_answers: document.getElementById('assignShuffleAnswers').checked,
             content_tex: variant.content
@@ -1647,6 +1790,14 @@
                         highest: 'Điểm cao nhất',
                         latest: 'Lượt cuối'
                     }[assignment.score_policy || 'latest'];
+                    const attemptLimitText = assignment.max_attempts === null
+                        ? 'Không giới hạn lượt'
+                        : `Tối đa ${assignment.max_attempts} lượt`;
+                    const releaseText = {
+                        immediate: 'Điểm ngay sau khi nộp',
+                        after_due: 'Điểm sau hạn đóng',
+                        manual: assignment.results_published ? 'Điểm đã công bố' : 'Điểm chờ công bố'
+                    }[assignment.result_release_policy || 'immediate'];
                     return `
                         <div class="list-group-item border-0 border-bottom p-3 bg-body">
                             <div class="d-flex justify-content-between align-items-start gap-3">
@@ -1657,6 +1808,7 @@
                                     </div>
                                     <div class="small text-muted">${assignment.total_questions} câu • ${durationText} • ${dueText}</div>
                                     <div class="small text-muted">Đã nộp: ${assignment.submission_count} • Tính điểm: ${scorePolicyText}</div>
+                                    <div class="small text-muted">${attemptLimitText} • ${releaseText}</div>
                                     <div class="small text-muted">Phiên bản đề: <span class="font-monospace">${escapeHtml(assignment.version_hash || '-')}</span></div>
                                 </div>
                                 <div class="d-flex flex-column gap-2 flex-shrink-0">
@@ -1694,8 +1846,12 @@
         document.getElementById('manageAssignmentDueAt').value = toDateTimeLocalValue(assignment.due_at);
         document.getElementById('manageAssignmentDuration').value = assignment.duration_minutes || '';
         document.getElementById('manageAssignmentActive').checked = Boolean(assignment.is_active);
-        document.getElementById('manageAssignmentAllowRetry').checked = Boolean(assignment.allow_retry);
+        document.getElementById('manageAssignmentMaxAttempts').value = assignment.max_attempts ?? '';
+        document.getElementById('manageAssignmentRetryCooldown').value = assignment.retry_cooldown_minutes || 0;
         document.getElementById('manageAssignmentScorePolicy').value = assignment.score_policy || 'latest';
+        document.getElementById('manageAssignmentResultReleasePolicy').value = assignment.result_release_policy || 'immediate';
+        document.getElementById('manageAssignmentResultsPublished').checked = Boolean(assignment.results_published);
+        document.getElementById('manageAssignmentShowAnswers').checked = Boolean(assignment.show_answers);
         document.getElementById('manageAssignmentShuffleQuestions').checked = Boolean(assignment.shuffle_questions);
         document.getElementById('manageAssignmentShuffleAnswers').checked = Boolean(assignment.shuffle_answers);
 
@@ -1711,8 +1867,12 @@
             due_at: document.getElementById('manageAssignmentDueAt').value,
             duration_minutes: document.getElementById('manageAssignmentDuration').value,
             is_active: document.getElementById('manageAssignmentActive').checked,
-            allow_retry: document.getElementById('manageAssignmentAllowRetry').checked,
+            max_attempts: document.getElementById('manageAssignmentMaxAttempts').value,
+            retry_cooldown_minutes: document.getElementById('manageAssignmentRetryCooldown').value,
             score_policy: document.getElementById('manageAssignmentScorePolicy').value,
+            result_release_policy: document.getElementById('manageAssignmentResultReleasePolicy').value,
+            results_published: document.getElementById('manageAssignmentResultsPublished').checked,
+            show_answers: document.getElementById('manageAssignmentShowAnswers').checked,
             shuffle_questions: document.getElementById('manageAssignmentShuffleQuestions').checked,
             shuffle_answers: document.getElementById('manageAssignmentShuffleAnswers').checked
         };

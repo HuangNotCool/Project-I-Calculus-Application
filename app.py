@@ -1,8 +1,10 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file, abort, g
-from models import db, User, Badge, Class, ExamTemplate, ExamBank, Assignment, AssignmentAttempt, Submission, Notification
+from models import db, User, Badge, Class, ClassJoinRequest, ExamTemplate, ExamBank, Assignment, AssignmentAttempt, Submission, Notification
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_migrate import Migrate, upgrade, stamp
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect
+from sqlalchemy import inspect, func
+from sqlalchemy.exc import IntegrityError
 from functools import wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -66,6 +68,10 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = os.getenv('COOKIE_SECURE', '0') == '1'
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))
 app.config['APP_TIMEZONE'] = os.getenv('APP_TIMEZONE', 'Asia/Bangkok')
+app.config['ATTEMPT_SWEEP_INTERVAL_SECONDS'] = max(
+    int(os.getenv('ATTEMPT_SWEEP_INTERVAL_SECONDS', '15')),
+    5
+)
 
 
 def app_now():
@@ -76,6 +82,7 @@ def app_now():
     return datetime.now(configured_timezone).replace(tzinfo=None)
 
 db.init_app(app)
+migrate = Migrate(app, db, compare_type=True)
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -86,6 +93,9 @@ _rate_limit_lock = threading.Lock()
 _rate_limit_events = {}
 _submission_locks_guard = threading.Lock()
 _submission_locks = {}
+_attempt_sweeper_guard = threading.Lock()
+_attempt_sweeper_started = False
+_attempt_sweeper_stop = threading.Event()
 
 
 def security_error(message, status=403):
@@ -149,7 +159,7 @@ def rate_limit(limit, window_seconds, key_prefix):
             if request.method == 'GET':
                 return func(*args, **kwargs)
             identity = str(current_user.id) if current_user.is_authenticated else request.remote_addr or 'unknown'
-            if key_prefix == 'login':
+            if key_prefix in {'login', 'register'}:
                 identity = f'{identity}:{str(request.form.get("username") or "").strip().lower()}'
             key = f'{key_prefix}:{identity}'
             now = time.monotonic()
@@ -190,7 +200,7 @@ def teacher_owns_class(func):
     @role_required('teacher')
     def wrapper(*args, **kwargs):
         class_id = kwargs.get('class_id')
-        target_class = Class.query.get_or_404(class_id)
+        target_class = db.get_or_404(Class, class_id)
         if target_class.teacher_id != current_user.id:
             return security_error('Bạn không có quyền truy cập lớp này.', 403)
         g.target_class = target_class
@@ -203,7 +213,7 @@ def teacher_owns_assignment(func):
     @role_required('teacher')
     def wrapper(*args, **kwargs):
         assignment_id = kwargs.get('assignment_id')
-        assignment = Assignment.query.get_or_404(assignment_id)
+        assignment = db.get_or_404(Assignment, assignment_id)
         if assignment.teacher_id != current_user.id:
             return security_error('Bạn không có quyền truy cập bài được giao này.', 403)
         g.assignment = assignment
@@ -216,7 +226,7 @@ def student_can_access_assignment(func):
     @role_required('student')
     def wrapper(*args, **kwargs):
         assignment_id = kwargs.get('assignment_id')
-        assignment = Assignment.query.get_or_404(assignment_id)
+        assignment = db.get_or_404(Assignment, assignment_id)
         if assignment.class_id not in {item.id for item in current_user.enrolled_classes}:
             return security_error('Bạn không thuộc lớp được giao bài này.', 403)
         g.assignment = assignment
@@ -235,7 +245,7 @@ def get_submission_lock(attempt_id):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 def parse_advanced_template(template_text):
     def generate_instance(seed_val=1):
@@ -872,26 +882,111 @@ def parse_assignment_questions(tex_content):
     return questions, answer_key
 
 
+def get_assignment_max_attempts(assignment):
+    if assignment.max_attempts is None:
+        return None
+    try:
+        value = int(assignment.max_attempts)
+    except (TypeError, ValueError):
+        return 1
+    return value if value > 0 else None
+
+
+def is_assignment_result_published(assignment, now=None):
+    now = now or app_now()
+    policy = assignment.result_release_policy or 'immediate'
+    if policy == 'after_due':
+        return bool(assignment.due_at and now >= assignment.due_at)
+    if policy == 'manual':
+        return bool(assignment.results_published)
+    return True
+
+
+def get_assignment_attempt_state(assignment, student_id, now=None):
+    now = now or app_now()
+    attempts = (
+        AssignmentAttempt.query
+        .filter_by(assignment_id=assignment.id, student_id=student_id)
+        .order_by(AssignmentAttempt.attempt_number.asc(), AssignmentAttempt.id.asc())
+        .all()
+    )
+    active_attempt = next((item for item in reversed(attempts) if not item.is_completed), None)
+    completed_attempts = [item for item in attempts if item.is_completed]
+    max_attempts = get_assignment_max_attempts(assignment)
+    attempts_used = len(completed_attempts)
+    attempts_remaining = None if max_attempts is None else max(max_attempts - attempts_used, 0)
+    attempts_exhausted = max_attempts is not None and attempts_used >= max_attempts
+
+    retry_available_at = None
+    cooldown_seconds = 0
+    cooldown_minutes = max(int(assignment.retry_cooldown_minutes or 0), 0)
+    if completed_attempts and cooldown_minutes:
+        completed_at = completed_attempts[-1].completed_at
+        if completed_at:
+            retry_available_at = completed_at + timedelta(minutes=cooldown_minutes)
+            cooldown_seconds = max(int((retry_available_at - now).total_seconds()), 0)
+
+    can_create_attempt = (
+        not active_attempt
+        and not attempts_exhausted
+        and cooldown_seconds == 0
+    )
+    return {
+        'attempts': attempts,
+        'active_attempt': active_attempt,
+        'completed_attempts': completed_attempts,
+        'attempts_used': attempts_used,
+        'attempts_remaining': attempts_remaining,
+        'attempts_exhausted': attempts_exhausted,
+        'retry_available_at': retry_available_at,
+        'cooldown_seconds': cooldown_seconds,
+        'can_create_attempt': can_create_attempt
+    }
+
+
+def serialize_student_submission(assignment, submission, attempt=None):
+    result_published = is_assignment_result_published(assignment)
+    answers_visible = result_published and bool(assignment.show_answers)
+    return {
+        'submitted': bool(submission),
+        'answers': json.loads((attempt.answers_json if attempt else submission.answers_json) or '{}')
+        if submission else {},
+        'score': submission.score if submission and result_published else None,
+        'correct_count': submission.correct_count if submission and result_published else None,
+        'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M')
+        if submission and submission.submitted_at else '',
+        'result_published': result_published,
+        'answers_visible': answers_visible,
+        'answer_key': json.loads(attempt.answer_key_json or '[]')
+        if attempt and answers_visible else []
+    }
+
+
+def build_submission_response(assignment, attempt, submission, message, timed_out=False):
+    result_published = is_assignment_result_published(assignment)
+    return {
+        'success': True,
+        'timed_out': timed_out,
+        'message': message,
+        'result_published': result_published,
+        'score': attempt.score if result_published else None,
+        'recorded_score': submission.score if submission and result_published else None,
+        'correct_count': attempt.correct_count if result_published else None,
+        'total_questions': attempt.total_questions
+    }
+
+
 def serialize_assignment_summary(assignment, include_class=False, student_id=None):
     submission = None
-    active_attempt = None
-    student_attempts = []
+    attempt_state = None
     if student_id:
         submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=student_id).first()
-        active_attempt = (
-            AssignmentAttempt.query
-            .filter_by(assignment_id=assignment.id, student_id=student_id, is_completed=False)
-            .order_by(AssignmentAttempt.id.desc())
-            .first()
-        )
-        student_attempts = (
-            AssignmentAttempt.query
-            .filter_by(assignment_id=assignment.id, student_id=student_id, is_completed=True)
-            .order_by(AssignmentAttempt.attempt_number.asc(), AssignmentAttempt.id.asc())
-            .all()
-        )
+        attempt_state = get_assignment_attempt_state(assignment, student_id)
 
     now = app_now()
+    active_attempt = attempt_state['active_attempt'] if attempt_state else None
+    student_attempts = attempt_state['completed_attempts'] if attempt_state else []
+    result_published = is_assignment_result_published(assignment, now)
     if not assignment.is_active:
         availability = 'closed'
     elif assignment.opens_at and now < assignment.opens_at:
@@ -900,13 +995,18 @@ def serialize_assignment_summary(assignment, include_class=False, student_id=Non
         availability = 'expired'
     elif active_attempt:
         availability = 'in_progress'
-    elif submission and not assignment.allow_retry:
-        availability = 'submitted'
-    elif submission and assignment.allow_retry:
+    elif submission and attempt_state and attempt_state['attempts_exhausted']:
+        availability = 'attempts_exhausted'
+    elif submission and attempt_state and attempt_state['cooldown_seconds'] > 0:
+        availability = 'retry_cooldown'
+    elif submission and attempt_state and attempt_state['can_create_attempt']:
         availability = 'retry_available'
+    elif submission:
+        availability = 'submitted'
     else:
         availability = 'available'
 
+    max_attempts = get_assignment_max_attempts(assignment)
     data = {
         'id': assignment.id,
         'title': assignment.title,
@@ -916,8 +1016,15 @@ def serialize_assignment_summary(assignment, include_class=False, student_id=Non
         'opens_at': assignment.opens_at.strftime('%Y-%m-%d %H:%M') if assignment.opens_at else '',
         'due_at': assignment.due_at.strftime('%Y-%m-%d %H:%M') if assignment.due_at else '',
         'duration_minutes': assignment.duration_minutes,
-        'allow_retry': bool(assignment.allow_retry),
+        'allow_retry': max_attempts is None or max_attempts > 1,
+        'max_attempts': max_attempts,
+        'retry_cooldown_minutes': max(int(assignment.retry_cooldown_minutes or 0), 0),
         'score_policy': assignment.score_policy or 'latest',
+        'result_release_policy': assignment.result_release_policy or 'immediate',
+        'results_published': bool(assignment.results_published),
+        'result_published': result_published,
+        'show_answers': bool(assignment.show_answers),
+        'answers_visible': result_published and bool(assignment.show_answers),
         'shuffle_questions': bool(assignment.shuffle_questions),
         'shuffle_answers': bool(assignment.shuffle_answers),
         'version_hash': assignment.version_hash or '',
@@ -928,13 +1035,19 @@ def serialize_assignment_summary(assignment, include_class=False, student_id=Non
         'has_active_attempt': bool(active_attempt),
         'submission_count': len(assignment.submissions),
         'submitted': bool(submission),
-        'score': submission.score if submission else None,
-        'correct_count': submission.correct_count if submission else None,
+        'score': submission.score if submission and result_published else None,
+        'correct_count': submission.correct_count if submission and result_published else None,
         'attempt_count': len(student_attempts) if student_id else None,
+        'attempts_remaining': attempt_state['attempts_remaining'] if attempt_state else None,
+        'retry_cooldown_seconds': attempt_state['cooldown_seconds'] if attempt_state else 0,
+        'retry_available_at': (
+            attempt_state['retry_available_at'].strftime('%Y-%m-%d %H:%M')
+            if attempt_state and attempt_state['retry_available_at'] else ''
+        ),
         'attempt_history': [{
             'attempt_number': item.attempt_number,
-            'score': item.score,
-            'correct_count': item.correct_count,
+            'score': item.score if result_published else None,
+            'correct_count': item.correct_count if result_published else None,
             'total_questions': item.total_questions or assignment.total_questions,
             'completed_at': item.completed_at.strftime('%Y-%m-%d %H:%M') if item.completed_at else '',
             'completion_reason': item.completion_reason or 'submitted',
@@ -968,6 +1081,102 @@ def parse_bool(value, default=False):
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def normalize_username(value):
+    return str(value or '').strip().lower()
+
+
+def normalize_student_code(value):
+    return re.sub(r'\s+', '', str(value or '').strip()).upper()
+
+
+def validate_username(username):
+    if not 3 <= len(username) <= 50:
+        return 'Tên đăng nhập phải có từ 3 đến 50 ký tự.'
+    if not re.fullmatch(r'[a-z0-9._-]+', username):
+        return 'Tên đăng nhập chỉ được gồm chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.'
+    return None
+
+
+def validate_password(password):
+    if not 8 <= len(password) <= 128:
+        return 'Mật khẩu phải có từ 8 đến 128 ký tự.'
+    if not re.search(r'[A-Za-z]', password) or not re.search(r'\d', password):
+        return 'Mật khẩu phải có ít nhất một chữ cái và một chữ số.'
+    return None
+
+
+def validate_student_profile(student_code, school_name, major):
+    if not re.fullmatch(r'[A-Z0-9-]{5,30}', student_code):
+        return 'Mã số sinh viên phải có từ 5 đến 30 ký tự, chỉ gồm chữ, số hoặc dấu gạch ngang.'
+    if not 2 <= len(school_name) <= 200:
+        return 'Tên trường phải có từ 2 đến 200 ký tự.'
+    if not 2 <= len(major) <= 150:
+        return 'Tên ngành phải có từ 2 đến 150 ký tự.'
+    return None
+
+
+def dashboard_url_for(user):
+    return url_for('teacher_dashboard' if user.role == 'teacher' else 'student_dashboard')
+
+
+def safe_next_url(target):
+    target = str(target or '').strip()
+    return target if target.startswith('/') and not target.startswith('//') else ''
+
+
+def parse_assignment_policy(data, current_assignment=None):
+    raw_max_attempts = data.get('max_attempts')
+    if raw_max_attempts is None and 'allow_retry' in data:
+        raw_max_attempts = '' if parse_bool(data.get('allow_retry')) else '1'
+    if raw_max_attempts is None and current_assignment is not None:
+        max_attempts = get_assignment_max_attempts(current_assignment)
+    else:
+        raw_max_attempts = str(raw_max_attempts or '').strip()
+        if not raw_max_attempts:
+            max_attempts = None
+        else:
+            try:
+                max_attempts = int(raw_max_attempts)
+            except ValueError as exc:
+                raise ValueError('Số lần làm tối đa phải là số nguyên.') from exc
+            if max_attempts < 1:
+                raise ValueError('Số lần làm tối đa phải từ 1 trở lên.')
+
+    raw_cooldown = data.get('retry_cooldown_minutes')
+    if raw_cooldown is None and current_assignment is not None:
+        cooldown_minutes = max(int(current_assignment.retry_cooldown_minutes or 0), 0)
+    else:
+        try:
+            cooldown_minutes = int(str(raw_cooldown or '0').strip())
+        except ValueError as exc:
+            raise ValueError('Thời gian chờ giữa các lượt phải là số nguyên.') from exc
+        if cooldown_minutes < 0:
+            raise ValueError('Thời gian chờ giữa các lượt không được âm.')
+
+    result_release_policy = str(
+        data.get('result_release_policy')
+        or (current_assignment.result_release_policy if current_assignment else 'immediate')
+        or 'immediate'
+    ).strip().lower()
+    if result_release_policy not in {'immediate', 'after_due', 'manual'}:
+        raise ValueError('Chính sách công bố kết quả không hợp lệ.')
+
+    return {
+        'max_attempts': max_attempts,
+        'retry_cooldown_minutes': cooldown_minutes,
+        'allow_retry': max_attempts is None or max_attempts > 1,
+        'result_release_policy': result_release_policy,
+        'results_published': parse_bool(
+            data.get('results_published'),
+            default=bool(current_assignment.results_published) if current_assignment else False
+        ),
+        'show_answers': parse_bool(
+            data.get('show_answers'),
+            default=bool(current_assignment.show_answers) if current_assignment else False
+        )
+    }
 
 
 def build_assignment_attempt_content(assignment):
@@ -1016,6 +1225,16 @@ def build_assignment_attempt_content(assignment):
 
 
 def create_assignment_attempt(assignment, student_id):
+    attempt_state = get_assignment_attempt_state(assignment, student_id)
+    if attempt_state['active_attempt']:
+        return attempt_state['active_attempt']
+    if attempt_state['attempts_exhausted']:
+        raise ValueError('Bạn đã sử dụng hết số lần làm bài.')
+    if attempt_state['cooldown_seconds'] > 0:
+        raise ValueError(
+            f'Bạn cần chờ thêm {attempt_state["cooldown_seconds"]} giây trước khi làm lại.'
+        )
+
     questions, answer_key = build_assignment_attempt_content(assignment)
     now = app_now()
     expires_at = None
@@ -1338,10 +1557,16 @@ def save_attempt_submission(assignment, attempt, student_id, answers, completion
     attempt.last_saved_at = app_now()
     attempt.completion_reason = completion_reason
     submission = refresh_submission_from_attempts(assignment, student_id)
+    result_published = is_assignment_result_published(assignment)
+    notification_message = (
+        f'{assignment.title}: lần {attempt.attempt_number} đạt {score}/10.'
+        if result_published
+        else f'{assignment.title}: đã ghi nhận lần làm thứ {attempt.attempt_number}. Kết quả sẽ được công bố sau.'
+    )
     create_notification(
         student_id,
         'Đã ghi nhận bài nộp',
-        f'{assignment.title}: lần {attempt.attempt_number} đạt {score}/10.',
+        notification_message,
         category='success',
         link='#tab-practice',
         dedupe_key=f'attempt-submitted-{attempt.id}'
@@ -1350,6 +1575,80 @@ def save_attempt_submission(assignment, attempt, student_id, answers, completion
     award_student_badges(db.session.get(User, student_id))
     db.session.commit()
     return submission
+
+
+def get_attempt_effective_deadline(attempt):
+    deadline = attempt.expires_at
+    assignment_due_at = attempt.assignment.due_at if attempt.assignment else None
+    if assignment_due_at and (deadline is None or assignment_due_at < deadline):
+        deadline = assignment_due_at
+    return deadline
+
+
+def finalize_expired_attempts(limit=200):
+    now = app_now()
+    candidates = (
+        AssignmentAttempt.query
+        .filter_by(is_completed=False)
+        .order_by(AssignmentAttempt.id.asc())
+        .limit(limit)
+        .all()
+    )
+    finalized_count = 0
+    for candidate in candidates:
+        deadline = get_attempt_effective_deadline(candidate)
+        if not deadline or now <= deadline:
+            continue
+        with get_submission_lock(candidate.id):
+            attempt = db.session.get(AssignmentAttempt, candidate.id)
+            if not attempt or attempt.is_completed:
+                continue
+            deadline = get_attempt_effective_deadline(attempt)
+            if not deadline or app_now() <= deadline:
+                continue
+            try:
+                saved_answers = json.loads(attempt.answers_json or '{}')
+                save_attempt_submission(
+                    attempt.assignment,
+                    attempt,
+                    attempt.student_id,
+                    saved_answers,
+                    completion_reason='timeout'
+                )
+                finalized_count += 1
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('Could not finalize expired attempt %s', candidate.id)
+    return finalized_count
+
+
+def attempt_sweeper_loop():
+    interval = app.config['ATTEMPT_SWEEP_INTERVAL_SECONDS']
+    while not _attempt_sweeper_stop.wait(interval):
+        with app.app_context():
+            try:
+                finalize_expired_attempts()
+            except Exception:
+                db.session.rollback()
+                app.logger.exception('Expired attempt sweeper failed')
+            finally:
+                db.session.remove()
+
+
+def start_attempt_sweeper():
+    global _attempt_sweeper_started
+    if app.config.get('TESTING') or os.getenv('DISABLE_ATTEMPT_SWEEPER', '0') == '1':
+        return
+    with _attempt_sweeper_guard:
+        if _attempt_sweeper_started:
+            return
+        worker = threading.Thread(
+            target=attempt_sweeper_loop,
+            name='assignment-attempt-sweeper',
+            daemon=True
+        )
+        worker.start()
+        _attempt_sweeper_started = True
 
 
 def ensure_exam_bank_schema():
@@ -1375,7 +1674,12 @@ def ensure_assignment_schema():
         'opens_at': 'DATETIME',
         'duration_minutes': 'INTEGER',
         'allow_retry': 'BOOLEAN DEFAULT 0',
+        'max_attempts': 'INTEGER DEFAULT 1',
+        'retry_cooldown_minutes': 'INTEGER DEFAULT 0',
         'score_policy': "VARCHAR(20) DEFAULT 'latest'",
+        'result_release_policy': "VARCHAR(20) DEFAULT 'immediate'",
+        'results_published': 'BOOLEAN DEFAULT 0',
+        'show_answers': 'BOOLEAN DEFAULT 0',
         'shuffle_questions': 'BOOLEAN DEFAULT 0',
         'shuffle_answers': 'BOOLEAN DEFAULT 0',
         'version_hash': 'VARCHAR(64)'
@@ -1386,6 +1690,31 @@ def ensure_assignment_schema():
                 connection.exec_driver_sql(
                     f'ALTER TABLE assignment ADD COLUMN {column_name} {column_type}'
                 )
+
+
+def backfill_assignment_policies():
+    changed = False
+    for assignment in Assignment.query.all():
+        if assignment.allow_retry and assignment.max_attempts == 1:
+            assignment.max_attempts = None
+            changed = True
+        elif not assignment.allow_retry and assignment.max_attempts is None:
+            assignment.max_attempts = 1
+            changed = True
+        if assignment.retry_cooldown_minutes is None:
+            assignment.retry_cooldown_minutes = 0
+            changed = True
+        if not assignment.result_release_policy:
+            assignment.result_release_policy = 'immediate'
+            changed = True
+        if assignment.results_published is None:
+            assignment.results_published = False
+            changed = True
+        if assignment.show_answers is None:
+            assignment.show_answers = False
+            changed = True
+    if changed:
+        db.session.commit()
 
 
 def ensure_attempt_schema():
@@ -1462,19 +1791,37 @@ def backfill_attempt_results():
         db.session.commit()
 
 
-with app.app_context():
-    db.create_all()
-    ensure_badge_schema()
-    ensure_exam_bank_schema()
-    ensure_assignment_schema()
-    ensure_attempt_schema()
-    ensure_submission_schema()
-    backfill_assignment_versions()
-    backfill_attempt_results()
-    ensure_badge_catalog()
-    for existing_student in User.query.filter_by(role='student').all():
-        award_student_badges(existing_student, notify=False)
-    db.session.commit()
+def bootstrap_application_data():
+    with app.app_context():
+        table_names = set(inspect(db.engine).get_table_names())
+        if not table_names:
+            upgrade()
+        elif 'alembic_version' not in table_names:
+            ensure_badge_schema()
+            ensure_exam_bank_schema()
+            ensure_assignment_schema()
+            ensure_attempt_schema()
+            ensure_submission_schema()
+            stamp(revision='1e9c0ae60696')
+            upgrade()
+        else:
+            upgrade()
+        backfill_assignment_policies()
+        backfill_assignment_versions()
+        backfill_attempt_results()
+        ensure_badge_catalog()
+        for existing_student in User.query.filter_by(role='student').all():
+            award_student_badges(existing_student, notify=False)
+        db.session.commit()
+
+
+if os.getenv('SKIP_SCHEMA_BOOTSTRAP', '0') != '1':
+    bootstrap_application_data()
+
+
+@app.before_request
+def ensure_attempt_sweeper_started():
+    start_attempt_sweeper()
 
 
 def backup_sqlite_database(output_path=None):
@@ -1524,6 +1871,34 @@ def backup_db_command(output):
     click.echo(f'Backup created: {backup_path}')
 
 
+@app.cli.command('finalize-expired-attempts')
+def finalize_expired_attempts_command():
+    """Finalize every unfinished attempt whose deadline has passed."""
+    finalized_count = finalize_expired_attempts()
+    click.echo(f'Finalized attempts: {finalized_count}')
+
+
+@app.cli.command('create-teacher')
+@click.option('--username', prompt='Tên đăng nhập giáo viên')
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True)
+def create_teacher_command(username, password):
+    """Create a teacher account outside public registration."""
+    username = normalize_username(username)
+    validation_error = validate_username(username) or validate_password(password)
+    if validation_error:
+        raise click.ClickException(validation_error)
+    if User.query.filter(func.lower(User.username) == username).first():
+        raise click.ClickException('Tên đăng nhập đã tồn tại.')
+
+    db.session.add(User(
+        username=username,
+        password=generate_password_hash(password),
+        role='teacher'
+    ))
+    db.session.commit()
+    click.echo(f'Đã tạo tài khoản giáo viên: {username}')
+
+
 # --- CÁC ĐƯỜNG DẪN CƠ BẢN ---
 @app.route('/')
 def home():
@@ -1536,47 +1911,89 @@ def api_security_csrf_token():
 
 
 @app.route('/register', methods=['GET', 'POST'])
+@rate_limit(5, 300, 'register')
 def register():
+    if current_user.is_authenticated:
+        return redirect(dashboard_url_for(current_user))
+
+    form_data = {
+        'username': '',
+        'student_code': '',
+        'school_name': 'Đại học Bách Khoa Hà Nội',
+        'major': ''
+    }
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        role = request.form.get('role')
+        username = normalize_username(request.form.get('username'))
+        password = str(request.form.get('password') or '')
+        confirm_password = str(request.form.get('confirm_password') or '')
+        student_code = normalize_student_code(request.form.get('student_code'))
+        school_name = str(request.form.get('school_name') or '').strip()
+        major = str(request.form.get('major') or '').strip()
+        form_data.update({
+            'username': username,
+            'student_code': student_code,
+            'school_name': school_name,
+            'major': major
+        })
 
-        user_exists = User.query.filter_by(username=username).first()
-        if user_exists:
-            flash('Tên đăng nhập hoặc Mã SV đã tồn tại!', 'danger')
-            return redirect(url_for('register'))
+        validation_error = (
+            validate_username(username)
+            or validate_password(password)
+            or validate_student_profile(student_code, school_name, major)
+        )
+        if validation_error:
+            flash(validation_error, 'danger')
+            return render_template('register.html', form_data=form_data), 400
+        if password != confirm_password:
+            flash('Mật khẩu nhập lại không khớp.', 'danger')
+            return render_template('register.html', form_data=form_data), 400
 
-        hashed_password = generate_password_hash(password)
-        new_user = User(username=username, password=hashed_password, role=role)
-        
-        db.session.add(new_user)
-        db.session.commit() 
-        
-        if role == 'student':
+        if User.query.filter(func.lower(User.username) == username).first():
+            flash('Tên đăng nhập đã tồn tại.', 'danger')
+            return render_template('register.html', form_data=form_data), 409
+        if User.query.filter_by(student_code=student_code).first():
+            flash('Mã số sinh viên đã được sử dụng.', 'danger')
+            return render_template('register.html', form_data=form_data), 409
+
+        new_user = User(
+            username=username,
+            password=generate_password_hash(password),
+            role='student',
+            student_code=student_code,
+            school_name=school_name,
+            major=major
+        )
+        try:
+            db.session.add(new_user)
+            db.session.flush()
             award_student_badges(new_user, notify=False)
             db.session.commit()
-        
+        except IntegrityError:
+            db.session.rollback()
+            flash('Tên đăng nhập hoặc mã số sinh viên đã tồn tại.', 'danger')
+            return render_template('register.html', form_data=form_data), 409
+
         flash('Đăng ký thành công! Vui lòng đăng nhập.', 'success')
         return redirect(url_for('login'))
 
-    return render_template('register.html')
+    return render_template('register.html', form_data=form_data)
 
 @app.route('/login', methods=['GET', 'POST'])
 @rate_limit(5, 60, 'login')
 def login():
+    if current_user.is_authenticated:
+        return redirect(dashboard_url_for(current_user))
+
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        
-        user = User.query.filter_by(username=username).first()
+        username = normalize_username(request.form.get('username'))
+        password = str(request.form.get('password') or '')
+        user = User.query.filter(func.lower(User.username) == username).first()
         
         if user and check_password_hash(user.password, password):
+            next_url = safe_next_url(request.args.get('next'))
+            session.clear()
             login_user(user)
-            if user.role == 'teacher':
-                return redirect(url_for('teacher_dashboard'))
-            else:
-                return redirect(url_for('student_dashboard'))
+            return redirect(next_url or dashboard_url_for(user))
         else:
             flash('Sai tên đăng nhập hoặc mật khẩu. Vui lòng thử lại!', 'danger')
             return redirect(url_for('login'))
@@ -1587,6 +2004,7 @@ def login():
 @login_required
 def logout():
     logout_user()
+    session.clear()
     return redirect(url_for('home'))
 
 @app.route('/profile')
@@ -1596,6 +2014,86 @@ def profile():
         award_student_badges(current_user, notify=False)
         db.session.commit()
     return render_template('profile.html', user=current_user)
+
+
+@app.route('/profile/update', methods=['POST'])
+@login_required
+@rate_limit(10, 300, 'profile-update')
+def update_profile():
+    username = normalize_username(request.form.get('username'))
+    validation_error = validate_username(username)
+    if validation_error:
+        flash(validation_error, 'danger')
+        return redirect(url_for('profile'))
+
+    existing_username = User.query.filter(
+        func.lower(User.username) == username,
+        User.id != current_user.id
+    ).first()
+    if existing_username:
+        flash('Tên đăng nhập đã được sử dụng.', 'danger')
+        return redirect(url_for('profile'))
+
+    current_user.username = username
+    if current_user.role == 'student':
+        student_code = normalize_student_code(request.form.get('student_code'))
+        school_name = str(request.form.get('school_name') or '').strip()
+        major = str(request.form.get('major') or '').strip()
+        validation_error = validate_student_profile(student_code, school_name, major)
+        if validation_error:
+            db.session.rollback()
+            flash(validation_error, 'danger')
+            return redirect(url_for('profile'))
+        existing_code = User.query.filter(
+            User.student_code == student_code,
+            User.id != current_user.id
+        ).first()
+        if existing_code:
+            db.session.rollback()
+            flash('Mã số sinh viên đã được sử dụng.', 'danger')
+            return redirect(url_for('profile'))
+        current_user.student_code = student_code
+        current_user.school_name = school_name
+        current_user.major = major
+
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        flash('Tên đăng nhập hoặc mã số sinh viên đã tồn tại.', 'danger')
+        return redirect(url_for('profile'))
+
+    flash('Đã cập nhật thông tin cá nhân.', 'success')
+    return redirect(url_for('profile'))
+
+
+@app.route('/profile/change-password', methods=['POST'])
+@login_required
+@rate_limit(5, 300, 'password-change')
+def change_password():
+    current_password = str(request.form.get('current_password') or '')
+    new_password = str(request.form.get('new_password') or '')
+    confirm_password = str(request.form.get('confirm_password') or '')
+
+    if not check_password_hash(current_user.password, current_password):
+        flash('Mật khẩu hiện tại không chính xác.', 'danger')
+        return redirect(url_for('profile'))
+    validation_error = validate_password(new_password)
+    if validation_error:
+        flash(validation_error, 'danger')
+        return redirect(url_for('profile'))
+    if new_password != confirm_password:
+        flash('Mật khẩu mới nhập lại không khớp.', 'danger')
+        return redirect(url_for('profile'))
+    if check_password_hash(current_user.password, new_password):
+        flash('Mật khẩu mới phải khác mật khẩu hiện tại.', 'danger')
+        return redirect(url_for('profile'))
+
+    current_user.password = generate_password_hash(new_password)
+    db.session.commit()
+    flash('Đã đổi mật khẩu.', 'success')
+    return redirect(url_for('profile'))
+
 
 @app.route('/teacher-dashboard')
 @login_required
@@ -1624,10 +2122,17 @@ def student_dashboard():
     award_student_badges(current_user, notify=False)
     db.session.commit()
     badge_progress = serialize_student_badge_progress(current_user)
+    pending_join_requests = (
+        ClassJoinRequest.query
+        .filter_by(student_id=current_user.id, status='pending')
+        .order_by(ClassJoinRequest.requested_at.desc())
+        .all()
+    )
     return render_template(
         'student_dashboard.html',
         classes=my_classes,
-        badge_progress=badge_progress
+        badge_progress=badge_progress,
+        pending_join_requests=pending_join_requests
     )
 
 
@@ -1637,19 +2142,28 @@ def student_dashboard():
 @app.route('/api/teacher/create-class', methods=['POST'])
 @role_required('teacher')
 def api_create_class():
-    name = request.form.get('name')
-    description = request.form.get('description')
-    code = request.form.get('code')
+    name = str(request.form.get('name') or '').strip()
+    description = str(request.form.get('description') or '').strip()
+    code = str(request.form.get('code') or '').strip().upper()
+    join_policy = str(request.form.get('join_policy') or 'open').strip().lower()
 
     if not name or not code:
         return jsonify({'success': False, 'message': 'Thiếu thông tin lớp học!'})
+    if join_policy not in {'open', 'approval'}:
+        return jsonify({'success': False, 'message': 'Chế độ tham gia lớp không hợp lệ.'}), 400
 
     # Kiểm tra mã lớp đã tồn tại chưa
     existing_class = Class.query.filter_by(code=code).first()
     if existing_class:
         return jsonify({'success': False, 'message': 'Mã lớp này đã tồn tại, vui lòng tạo mã khác!'})
 
-    new_class = Class(name=name, description=description, code=code, teacher_id=current_user.id)
+    new_class = Class(
+        name=name,
+        description=description,
+        code=code,
+        teacher_id=current_user.id,
+        join_policy=join_policy
+    )
     db.session.add(new_class)
     db.session.commit()
 
@@ -1996,16 +2510,73 @@ def api_get_class_students(class_id):
         students_data.append({
             'id': student.id,
             'username': student.username,
-            # Tạm thời để tiến độ ngẫu nhiên hoặc 0%, sau này bạn nối bảng điểm vào đây
-            'progress': random.choice([0, 20, 50, 80, 100]) 
+            'student_code': student.student_code or '',
+            'school_name': student.school_name or '',
+            'major': student.major or ''
         })
+    pending_requests = (
+        ClassJoinRequest.query
+        .filter_by(class_id=target_class.id, status='pending')
+        .order_by(ClassJoinRequest.requested_at.asc())
+        .all()
+    )
 
     return jsonify({
         'success': True, 
         'class_name': target_class.name,
         'class_code': target_class.code,
-        'students': students_data
+        'join_policy': target_class.join_policy or 'open',
+        'students': students_data,
+        'pending_requests': [{
+            'id': item.id,
+            'username': item.student.username,
+            'student_code': item.student.student_code or '',
+            'school_name': item.student.school_name or '',
+            'major': item.student.major or '',
+            'requested_at': item.requested_at.strftime('%Y-%m-%d %H:%M') if item.requested_at else ''
+        } for item in pending_requests]
     })
+
+
+@app.route('/api/teacher/class/<int:class_id>/join-requests/<int:request_id>/<action>', methods=['POST'])
+@teacher_owns_class
+def api_review_class_join_request(class_id, request_id, action):
+    if action not in {'approve', 'reject'}:
+        return jsonify({'success': False, 'message': 'Thao tác không hợp lệ.'}), 400
+
+    join_request = ClassJoinRequest.query.filter_by(
+        id=request_id,
+        class_id=class_id,
+        status='pending'
+    ).first()
+    if not join_request:
+        return jsonify({'success': False, 'message': 'Yêu cầu không tồn tại hoặc đã được xử lý.'}), 404
+
+    if action == 'approve':
+        if join_request.student not in g.target_class.students:
+            g.target_class.students.append(join_request.student)
+        join_request.status = 'approved'
+        award_student_badges(join_request.student)
+        notification_title = 'Yêu cầu vào lớp đã được duyệt'
+        notification_message = f'Bạn đã được thêm vào lớp {g.target_class.name}.'
+        response_message = 'Đã duyệt sinh viên vào lớp.'
+    else:
+        join_request.status = 'rejected'
+        notification_title = 'Yêu cầu vào lớp bị từ chối'
+        notification_message = f'Yêu cầu tham gia lớp {g.target_class.name} chưa được chấp nhận.'
+        response_message = 'Đã từ chối yêu cầu tham gia.'
+
+    join_request.responded_at = app_now()
+    create_notification(
+        join_request.student_id,
+        notification_title,
+        notification_message,
+        category='success' if action == 'approve' else 'warning',
+        link='#tab-my-classes',
+        dedupe_key=f'class-join-{action}-{join_request.id}'
+    )
+    db.session.commit()
+    return jsonify({'success': True, 'message': response_message})
 
 
 # =====================================================================
@@ -2022,32 +2593,73 @@ def student_join_class():
     # 1. Truy vấn Database xem mã lớp có tồn tại không
     target_class = Class.query.filter_by(code=class_code).first()
 
-    if target_class:
-        # 2. Kiểm tra xem học sinh này đã tham gia lớp chưa
-        if current_user in target_class.students:
-            return jsonify({'success': False, 'message': 'Bạn đã tham gia lớp học này rồi!'})
-        
-        # 3. Thêm học sinh vào lớp và lưu lại
-        target_class.students.append(current_user)
-        db.session.commit()
-        award_student_badges(current_user)
-        db.session.commit()
+    if not target_class:
+        return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
 
-        # Lấy tên giáo viên phụ trách để trả về 
-        teacher = User.query.get(target_class.teacher_id)
-        teacher_name = teacher.username if teacher else 'Giáo viên'
+    if current_user in target_class.students:
+        return jsonify({'success': False, 'message': 'Bạn đã tham gia lớp học này rồi!'})
 
+    teacher = db.session.get(User, target_class.teacher_id)
+    teacher_name = teacher.username if teacher else 'Giáo viên'
+    existing_request = ClassJoinRequest.query.filter_by(
+        class_id=target_class.id,
+        student_id=current_user.id
+    ).first()
+
+    if target_class.join_policy == 'approval':
+        if existing_request and existing_request.status == 'pending':
+            return jsonify({
+                'success': True,
+                'pending': True,
+                'message': 'Yêu cầu của bạn đang chờ giáo viên duyệt.'
+            })
+        if existing_request:
+            existing_request.status = 'pending'
+            existing_request.requested_at = app_now()
+            existing_request.responded_at = None
+        else:
+            existing_request = ClassJoinRequest(
+                class_id=target_class.id,
+                student_id=current_user.id,
+                status='pending'
+            )
+            db.session.add(existing_request)
+        create_notification(
+            target_class.teacher_id,
+            'Có yêu cầu tham gia lớp',
+            f'{current_user.username} ({current_user.student_code or "chưa có mã SV"}) muốn tham gia lớp {target_class.name}.',
+            category='info',
+            link='#tab-class-management',
+            dedupe_key=f'class-join-request-{target_class.id}-{current_user.id}-{int(app_now().timestamp())}'
+        )
+        db.session.commit()
         return jsonify({
-            'success': True, 
-            'message': 'Tham gia thành công!',
+            'success': True,
+            'pending': True,
+            'message': 'Đã gửi yêu cầu. Bạn cần chờ giáo viên duyệt.',
             'class_info': {
                 'code': target_class.code,
                 'name': target_class.name,
                 'teacher': teacher_name
             }
         })
-    else:
-        return jsonify({'success': False, 'message': 'Mã lớp không tồn tại hoặc đã bị xóa.'})
+
+    target_class.students.append(current_user)
+    if existing_request:
+        existing_request.status = 'approved'
+        existing_request.responded_at = app_now()
+    award_student_badges(current_user)
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'pending': False,
+        'message': 'Tham gia thành công!',
+        'class_info': {
+            'code': target_class.code,
+            'name': target_class.name,
+            'teacher': teacher_name
+        }
+    })
 
 
 def serialize_exam_bank_item(item, include_variants=False):
@@ -2307,10 +2919,13 @@ def api_teacher_create_assignment():
                 return jsonify({'success': False, 'message': 'Thời lượng phải lớn hơn 0 phút.'})
         except ValueError:
             return jsonify({'success': False, 'message': 'Thời lượng phải là số nguyên.'})
-    allow_retry = parse_bool(data.get('allow_retry'))
     score_policy = str(data.get('score_policy') or 'latest').strip().lower()
     if score_policy not in {'first', 'latest', 'highest'}:
         score_policy = 'latest'
+    try:
+        assignment_policy = parse_assignment_policy(data)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     shuffle_questions = parse_bool(data.get('shuffle_questions'))
     shuffle_answers = parse_bool(data.get('shuffle_answers'))
 
@@ -2337,6 +2952,11 @@ def api_teacher_create_assignment():
 
     if opens_at and due_at and opens_at >= due_at:
         return jsonify({'success': False, 'message': 'Thời gian mở đề phải trước hạn đóng đề.'})
+    if assignment_policy['result_release_policy'] == 'after_due' and not due_at:
+        return jsonify({
+            'success': False,
+            'message': 'Cần đặt hạn đóng đề khi chọn công bố kết quả sau hạn.'
+        }), 400
 
     target_classes = Class.query.filter(Class.id.in_(normalized_class_ids)).all()
     if len(target_classes) != len(normalized_class_ids):
@@ -2361,8 +2981,13 @@ def api_teacher_create_assignment():
             opens_at=opens_at,
             due_at=due_at,
             duration_minutes=duration_minutes,
-            allow_retry=allow_retry,
+            allow_retry=assignment_policy['allow_retry'],
+            max_attempts=assignment_policy['max_attempts'],
+            retry_cooldown_minutes=assignment_policy['retry_cooldown_minutes'],
             score_policy=score_policy,
+            result_release_policy=assignment_policy['result_release_policy'],
+            results_published=assignment_policy['results_published'],
+            show_answers=assignment_policy['show_answers'],
             shuffle_questions=shuffle_questions,
             shuffle_answers=shuffle_answers,
             version_hash=hashlib.sha256(content_tex.encode('utf-8')).hexdigest()[:16],
@@ -2416,6 +3041,7 @@ def api_teacher_class_assignments(class_id):
 @teacher_owns_assignment
 def api_teacher_update_assignment(assignment_id):
     assignment = g.assignment
+    was_result_published = is_assignment_result_published(assignment)
 
     data = request.get_json() or {}
     title = str(data.get('title') or assignment.title).strip()
@@ -2442,7 +3068,21 @@ def api_teacher_update_assignment(assignment_id):
     assignment.opens_at = opens_at
     assignment.due_at = due_at
     assignment.duration_minutes = duration_minutes
-    assignment.allow_retry = parse_bool(data.get('allow_retry'))
+    try:
+        assignment_policy = parse_assignment_policy(data, assignment)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+    if assignment_policy['result_release_policy'] == 'after_due' and not due_at:
+        return jsonify({
+            'success': False,
+            'message': 'Cần đặt hạn đóng đề khi chọn công bố kết quả sau hạn.'
+        }), 400
+    assignment.allow_retry = assignment_policy['allow_retry']
+    assignment.max_attempts = assignment_policy['max_attempts']
+    assignment.retry_cooldown_minutes = assignment_policy['retry_cooldown_minutes']
+    assignment.result_release_policy = assignment_policy['result_release_policy']
+    assignment.results_published = assignment_policy['results_published']
+    assignment.show_answers = assignment_policy['show_answers']
     score_policy = str(data.get('score_policy') or assignment.score_policy or 'latest').strip().lower()
     if score_policy not in {'first', 'latest', 'highest'}:
         return jsonify({'success': False, 'message': 'Chính sách tính điểm không hợp lệ.'}), 400
@@ -2454,6 +3094,16 @@ def api_teacher_update_assignment(assignment_id):
     if score_policy_changed:
         for student in assignment.classroom.students:
             refresh_submission_from_attempts(assignment, student.id)
+    if not was_result_published and is_assignment_result_published(assignment):
+        for student in assignment.classroom.students:
+            create_notification(
+                student.id,
+                'Kết quả bài tập đã được công bố',
+                f'Bạn có thể xem kết quả của bài “{assignment.title}”.',
+                category='success',
+                link='#tab-practice',
+                dedupe_key=f'assignment-results-published-{assignment.id}'
+            )
     db.session.commit()
 
     return jsonify({
@@ -2714,6 +3364,17 @@ def api_notifications_read():
     return jsonify({'success': True})
 
 
+@app.route('/api/teacher/class/<int:class_id>/join-policy', methods=['PUT'])
+@teacher_owns_class
+def api_update_class_join_policy(class_id):
+    join_policy = str((request.get_json() or {}).get('join_policy') or '').strip().lower()
+    if join_policy not in {'open', 'approval'}:
+        return jsonify({'success': False, 'message': 'Chế độ tham gia lớp không hợp lệ.'}), 400
+    g.target_class.join_policy = join_policy
+    db.session.commit()
+    return jsonify({'success': True, 'join_policy': join_policy})
+
+
 @app.route('/api/student/assignments/<int:assignment_id>', methods=['GET'])
 @student_can_access_assignment
 def api_student_assignment_detail(assignment_id):
@@ -2723,14 +3384,10 @@ def api_student_assignment_detail(assignment_id):
     start_retry = parse_bool(request.args.get('start_retry'))
     submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=current_user.id).first()
     selected_attempt = get_submission_attempt(assignment, submission)
-    attempt = (
-        AssignmentAttempt.query
-        .filter_by(assignment_id=assignment.id, student_id=current_user.id, is_completed=False)
-        .order_by(AssignmentAttempt.id.desc())
-        .first()
-    )
+    attempt_state = get_assignment_attempt_state(assignment, current_user.id, now)
+    attempt = attempt_state['active_attempt']
 
-    if attempt and attempt.expires_at and now > attempt.expires_at:
+    if attempt and get_attempt_effective_deadline(attempt) and now > get_attempt_effective_deadline(attempt):
         draft_answers = json.loads(attempt.answers_json or '{}')
         save_attempt_submission(
             assignment,
@@ -2741,6 +3398,7 @@ def api_student_assignment_detail(assignment_id):
         )
         submission = Submission.query.filter_by(assignment_id=assignment.id, student_id=current_user.id).first()
         selected_attempt = get_submission_attempt(assignment, submission)
+        attempt_state = get_assignment_attempt_state(assignment, current_user.id)
         attempt = None
 
     summary = serialize_assignment_summary(assignment, include_class=True, student_id=current_user.id)
@@ -2757,16 +3415,11 @@ def api_student_assignment_detail(assignment_id):
             'questions': questions,
             'attempt': None,
             'can_submit': False,
-            'submission': {
-                'submitted': bool(submission),
-                'answers': json.loads(submission.answers_json or '{}') if submission else {},
-                'score': submission.score if submission else None,
-                'correct_count': submission.correct_count if submission else None,
-                'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission else ''
-            }
+            'retry_available': False,
+            'submission': serialize_student_submission(assignment, submission, selected_attempt)
         })
 
-    if submission and not attempt and (not assignment.allow_retry or not start_retry):
+    if submission and not attempt and not start_retry:
         questions = (
             json.loads(selected_attempt.questions_json or '[]')
             if selected_attempt
@@ -2778,18 +3431,27 @@ def api_student_assignment_detail(assignment_id):
             'questions': questions,
             'attempt': None,
             'can_submit': False,
-            'retry_available': bool(assignment.allow_retry),
-            'submission': {
-                'submitted': True,
-                'answers': json.loads(submission.answers_json or '{}'),
-                'score': submission.score,
-                'correct_count': submission.correct_count,
-                'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M')
-            }
+            'retry_available': summary['availability'] == 'retry_available',
+            'submission': serialize_student_submission(assignment, submission, selected_attempt)
         })
 
     if not attempt:
-        attempt = create_assignment_attempt(assignment, current_user.id)
+        attempt_state = get_assignment_attempt_state(assignment, current_user.id)
+        if attempt_state['attempts_exhausted']:
+            return jsonify({
+                'success': False,
+                'message': 'Bạn đã sử dụng hết số lần làm bài.'
+            }), 409
+        if attempt_state['cooldown_seconds'] > 0:
+            return jsonify({
+                'success': False,
+                'message': f'Bạn cần chờ thêm {attempt_state["cooldown_seconds"]} giây trước khi làm lại.',
+                'retry_cooldown_seconds': attempt_state['cooldown_seconds']
+            }), 409
+        try:
+            attempt = create_assignment_attempt(assignment, current_user.id)
+        except ValueError as exc:
+            return jsonify({'success': False, 'message': str(exc)}), 409
 
     remaining_seconds = None
     if attempt.expires_at:
@@ -2812,9 +3474,19 @@ def api_student_assignment_detail(assignment_id):
         'submission': {
             'submitted': bool(submission),
             'answers': json.loads(attempt.answers_json or '{}'),
-            'score': submission.score if submission else None,
-            'correct_count': submission.correct_count if submission else None,
-            'submitted_at': submission.submitted_at.strftime('%Y-%m-%d %H:%M') if submission else ''
+            'score': submission.score if submission and is_assignment_result_published(assignment) else None,
+            'correct_count': (
+                submission.correct_count
+                if submission and is_assignment_result_published(assignment)
+                else None
+            ),
+            'submitted_at': (
+                submission.submitted_at.strftime('%Y-%m-%d %H:%M')
+                if submission and submission.submitted_at else ''
+            ),
+            'result_published': is_assignment_result_published(assignment),
+            'answers_visible': False,
+            'answer_key': []
         }
     })
 
@@ -2845,7 +3517,8 @@ def api_student_autosave_assignment(assignment_id):
         return jsonify({'success': False, 'message': 'Phiên làm bài đã kết thúc hoặc không tồn tại.'}), 409
 
     now = app_now()
-    if attempt.expires_at and now > attempt.expires_at:
+    effective_deadline = get_attempt_effective_deadline(attempt)
+    if effective_deadline and now > effective_deadline:
         saved_answers = json.loads(attempt.answers_json or '{}')
         submission = save_attempt_submission(
             assignment,
@@ -2858,7 +3531,8 @@ def api_student_autosave_assignment(assignment_id):
             'success': False,
             'timed_out': True,
             'message': 'Đã hết thời gian và hệ thống đã tự nộp đáp án được lưu gần nhất.',
-            'score': submission.score
+            'result_published': is_assignment_result_published(assignment),
+            'score': submission.score if is_assignment_result_published(assignment) else None
         }), 409
 
     answer_key = json.loads(attempt.answer_key_json or '[]')
@@ -2920,34 +3594,21 @@ def api_student_submit_assignment(assignment_id):
             student_id=current_user.id
         ).first()
         if attempt.is_completed:
-            if attempt.submission_response_json:
-                response_data = json.loads(attempt.submission_response_json)
-            else:
-                recorded_submission = Submission.query.filter_by(
-                    assignment_id=assignment.id,
-                    student_id=current_user.id
-                ).first()
-                response_data = {
-                    'success': True,
-                    'message': 'Bài đã được nộp trước đó.',
-                    'score': attempt.score,
-                    'recorded_score': recorded_submission.score if recorded_submission else attempt.score,
-                    'correct_count': attempt.correct_count,
-                    'total_questions': attempt.total_questions
-                }
+            recorded_submission = Submission.query.filter_by(
+                assignment_id=assignment.id,
+                student_id=current_user.id
+            ).first()
+            response_data = build_submission_response(
+                assignment,
+                attempt,
+                recorded_submission,
+                'Bài đã được nộp trước đó.',
+                timed_out=attempt.completion_reason == 'timeout'
+            )
             response_data['duplicate'] = True
             return jsonify(response_data)
 
-        existing_submission = Submission.query.filter_by(
-            assignment_id=assignment.id,
-            student_id=current_user.id
-        ).first()
-        if existing_submission and not assignment.allow_retry:
-            return jsonify({'success': False, 'message': 'Bạn đã nộp bài này rồi.'}), 409
-
-        effective_deadline = attempt.expires_at
-        if assignment.due_at and (effective_deadline is None or assignment.due_at < effective_deadline):
-            effective_deadline = assignment.due_at
+        effective_deadline = get_attempt_effective_deadline(attempt)
         timed_out = bool(effective_deadline and now > effective_deadline + timedelta(seconds=10))
         submitted_answers = json.loads(attempt.answers_json or '{}') if timed_out else answers
         submission = save_attempt_submission(
@@ -2957,15 +3618,13 @@ def api_student_submit_assignment(assignment_id):
             submitted_answers,
             completion_reason='timeout' if timed_out else 'submitted'
         )
-        response_data = {
-            'success': True,
-            'timed_out': timed_out,
-            'message': 'Đã hết thời gian. Hệ thống tự động nộp bài.' if timed_out else 'Đã nộp bài.',
-            'score': attempt.score,
-            'recorded_score': submission.score,
-            'correct_count': attempt.correct_count,
-            'total_questions': attempt.total_questions
-        }
+        response_data = build_submission_response(
+            assignment,
+            attempt,
+            submission,
+            'Đã hết thời gian. Hệ thống tự động nộp bài.' if timed_out else 'Đã nộp bài.',
+            timed_out=timed_out
+        )
         attempt.submission_response_json = json.dumps(response_data, ensure_ascii=False)
         db.session.commit()
         return jsonify(response_data)

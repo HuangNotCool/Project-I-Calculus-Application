@@ -24,22 +24,19 @@
                     {% endif %}
                 {% endwith %}
 
-                <form method="POST" action="/login" class="position-relative z-1">
+                <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}" class="position-relative z-1">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
                             <span class="input-group-text border-0 text-primary bg-body"><i class="fa-solid fa-user"></i></span>
-                            <input type="text" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="username" name="username" placeholder="Tên đăng nhập" required>
+                            <input type="text" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="username" name="username" placeholder="Tên đăng nhập" autocomplete="username" required>
                         </div>
                     </div>
                     
                     <div class="mb-4">
                         <div class="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
                             <span class="input-group-text border-0 text-primary bg-body"><i class="fa-solid fa-lock"></i></span>
-                            <input type="password" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="password" name="password" placeholder="Nhập mật khẩu" required>
-                        </div>
-                        <div class="text-end mt-2">
-                            <a href="#" class="text-white text-decoration-none small opacity-75 hover-opacity-100">Quên mật khẩu?</a>
+                            <input type="password" class="form-control border-0 px-3 fs-6 py-3 bg-body text-body" id="password" name="password" placeholder="Nhập mật khẩu" autocomplete="current-password" required>
                         </div>
                     </div>
 
