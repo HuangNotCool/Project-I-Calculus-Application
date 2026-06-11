@@ -13,10 +13,10 @@
                     dụng hệ thống</a></p>
         </div>
         <div class="d-none d-md-flex align-items-center bg-white bg-opacity-25 px-4 py-2 rounded-pill shadow-sm">
-            <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=ffffff&color=007bff&rounded=true&bold=true"
+            <img src="https://ui-avatars.com/api/?name={{ current_user.display_name|urlencode }}&background=ffffff&color=007bff&rounded=true&bold=true"
                 alt="Avatar" width="40" class="rounded-circle me-3">
             <div>
-                <h6 class="mb-0 fw-bold">{{ current_user.username }}</h6>
+                <h6 class="mb-0 fw-bold">{{ current_user.display_name }}</h6>
                 <small class="opacity-75">
                     {{ current_user.student_code or 'Sinh viên' }}
                     {% if current_user.major %} • {{ current_user.major }}{% endif %}
@@ -152,7 +152,11 @@
                                 </div>
                                 <h5 class="fw-bold mb-1">{{ join_request.classroom.name }}</h5>
                                 <div class="small text-muted mb-2">Mã lớp: {{ join_request.classroom.code }}</div>
-                                <p class="small text-muted mb-0">Giáo viên chưa duyệt yêu cầu tham gia của bạn.</p>
+                                <p class="small text-muted mb-3">Giáo viên chưa duyệt yêu cầu tham gia của bạn.</p>
+                                <button class="btn btn-sm btn-outline-danger rounded-pill fw-bold"
+                                    onclick='cancelJoinRequest({{ join_request.id }}, {{ join_request.classroom.name|tojson }})'>
+                                    <i class="fa-solid fa-xmark me-1"></i>Hủy yêu cầu
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -171,9 +175,15 @@
                                 <h5 class="fw-bold text-body mb-1">{{ c.name }}</h5>
                                 <p class="text-muted small mb-3"><i class="fa-solid fa-circle-info me-1"></i> {{
                                     c.description if c.description else 'Học phần Giải tích' }}</p>
-                                <div class="mt-auto pt-3">
-                                    <button class="btn btn-outline-primary rounded-pill w-100 fw-bold hover-lift"
+                                <div class="mt-auto pt-3 d-flex gap-2">
+                                    <button class="btn btn-outline-primary rounded-pill flex-grow-1 fw-bold hover-lift"
                                         onclick="switchToTab('tab-practice')">Vào lớp ngay</button>
+                                    <button class="btn btn-outline-danger rounded-circle flex-shrink-0"
+                                        style="width: 42px; height: 42px;"
+                                        onclick='leaveClass({{ c.id }}, {{ c.name|tojson }})'
+                                        title="Rời lớp">
+                                        <i class="fa-solid fa-right-from-bracket"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -899,6 +909,34 @@
                 btn.disabled = false;
                 errorAlert.classList.remove('d-none');
             });
+    }
+
+    function cancelJoinRequest(requestId, className) {
+        if (!confirm(`Hủy yêu cầu tham gia lớp ${className}?`)) return;
+        fetch(`/api/student/join-requests/${requestId}`, { method: 'DELETE' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không hủy được yêu cầu tham gia.');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => alert('Không kết nối được máy chủ.'));
+    }
+
+    function leaveClass(classId, className) {
+        if (!confirm(`Rời lớp ${className}? Các bài đã nộp và điểm cũ vẫn được lưu.`)) return;
+        fetch(`/api/student/classes/${classId}`, { method: 'DELETE' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không thể rời lớp.');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => alert('Không kết nối được máy chủ.'));
     }
 
     document.addEventListener('DOMContentLoaded', () => {

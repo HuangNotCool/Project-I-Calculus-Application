@@ -7,6 +7,31 @@
     <title>Giải Tích HUST - Ôn luyện & Sinh đề</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .notification-menu {
+            width: min(390px, calc(100vw - 24px));
+            max-height: 520px;
+            overflow: hidden;
+        }
+        .notification-scroll {
+            max-height: 390px;
+            overflow-y: auto;
+        }
+        .notification-item {
+            white-space: normal;
+            border-left: 3px solid transparent;
+        }
+        .notification-item.is-unread {
+            background: var(--bs-primary-bg-subtle);
+            border-left-color: var(--bs-primary);
+        }
+        .notification-badge {
+            position: absolute;
+            top: -5px;
+            right: -7px;
+            min-width: 19px;
+        }
+    </style>
     
     <script>
         window.MathJax = {
@@ -41,10 +66,47 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
+                        <li class="nav-item me-2">
+                            <a href="{{ url_for('learning_calendar') }}" class="btn btn-outline-primary rounded-circle"
+                                title="Lịch học tập">
+                                <i class="fa-regular fa-calendar-days"></i>
+                            </a>
+                        </li>
+                        <li class="nav-item dropdown me-2">
+                            <button class="btn btn-outline-primary rounded-circle position-relative"
+                                id="globalNotificationButton" data-bs-toggle="dropdown"
+                                data-bs-auto-close="outside" aria-expanded="false" title="Thông báo">
+                                <i class="fa-regular fa-bell"></i>
+                                <span id="globalNotificationBadge"
+                                    class="notification-badge badge rounded-pill bg-danger d-none">0</span>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end notification-menu border-0 shadow-lg p-0"
+                                aria-labelledby="globalNotificationButton">
+                                <div class="d-flex justify-content-between align-items-center px-3 py-3 border-bottom">
+                                    <div>
+                                        <div class="fw-bold">Thông báo</div>
+                                        <div class="small text-muted" id="globalNotificationSummary">Đang tải...</div>
+                                    </div>
+                                    <button class="btn btn-sm btn-link text-decoration-none fw-bold"
+                                        onclick="markGlobalNotificationsRead()">Đã đọc hết</button>
+                                </div>
+                                <div class="notification-scroll" id="globalNotificationList">
+                                    <div class="text-center text-muted py-5">
+                                        <i class="fa-solid fa-spinner fa-spin"></i>
+                                    </div>
+                                </div>
+                                <div class="border-top p-2 d-grid">
+                                    <a href="{{ url_for('learning_calendar') }}"
+                                        class="btn btn-sm btn-outline-primary fw-bold">
+                                        <i class="fa-regular fa-calendar-days me-2"></i>Xem lịch học tập
+                                    </a>
+                                </div>
+                            </div>
+                        </li>
                         <li class="nav-item me-3">
                             <a href="{{ url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_dashboard') }}"
                                 class="nav-link text-primary fw-bold" title="Về trang chính">
-                                <i class="fa-solid fa-user-circle me-1"></i> Chào, {{ current_user.username }}
+                                <i class="fa-solid fa-user-circle me-1"></i> Chào, {{ current_user.display_name }}
                             </a>
                         </li>
                         <li class="nav-item me-2">
@@ -99,6 +161,11 @@
     <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        const authenticatedDashboardUrl = {{ (
+            url_for('teacher_dashboard') if current_user.is_authenticated and current_user.role == 'teacher'
+            else url_for('student_dashboard') if current_user.is_authenticated
+            else ''
+        )|tojson }};
         const nativeFetch = window.fetch.bind(window);
         window.fetch = function(input, init = {}) {
             const requestUrl = typeof input === 'string' ? input : input.url;
@@ -140,6 +207,87 @@
                 themeIcon.classList.add('fa-moon');
                 themeToggle.classList.replace('btn-outline-light', 'btn-outline-secondary');
             }
+        }
+
+        function globalNotificationEscapeHtml(value) {
+            const element = document.createElement('div');
+            element.textContent = value ?? '';
+            return element.innerHTML;
+        }
+
+        function loadGlobalNotifications() {
+            const list = document.getElementById('globalNotificationList');
+            if (!list) return;
+            fetch('/api/notifications')
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) throw new Error(data.message || 'Không tải được thông báo.');
+                    const items = data.notifications || [];
+                    const unreadCount = Number(data.unread_count || 0);
+                    const badge = document.getElementById('globalNotificationBadge');
+                    const summary = document.getElementById('globalNotificationSummary');
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    badge.classList.toggle('d-none', unreadCount === 0);
+                    summary.textContent = unreadCount ? `${unreadCount} thông báo chưa đọc` : 'Không có thông báo mới';
+
+                    if (!items.length) {
+                        list.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-regular fa-bell-slash fs-3 mb-2"></i><div>Chưa có thông báo.</div></div>';
+                        return;
+                    }
+
+                    const iconMap = {
+                        success: 'fa-circle-check text-success',
+                        warning: 'fa-triangle-exclamation text-warning',
+                        danger: 'fa-clock text-danger',
+                        secondary: 'fa-circle-info text-secondary',
+                        info: 'fa-circle-info text-primary'
+                    };
+                    list.innerHTML = items.map((item) => `
+                        <button type="button"
+                            class="dropdown-item notification-item px-3 py-3 border-bottom ${item.is_read ? '' : 'is-unread'}"
+                            onclick='openGlobalNotification(${Number(item.id)}, ${JSON.stringify(item.link || "")})'>
+                            <div class="d-flex gap-3">
+                                <i class="fa-solid ${iconMap[item.category] || iconMap.info} mt-1"></i>
+                                <div class="min-w-0">
+                                    <div class="fw-bold">${globalNotificationEscapeHtml(item.title)}</div>
+                                    <div class="small text-muted mt-1">${globalNotificationEscapeHtml(item.message)}</div>
+                                    <div class="small text-muted mt-1">${globalNotificationEscapeHtml(item.created_at)}</div>
+                                </div>
+                            </div>
+                        </button>
+                    `).join('');
+                })
+                .catch(() => {
+                    list.innerHTML = '<div class="text-center text-danger py-4">Không tải được thông báo.</div>';
+                });
+        }
+
+        function openGlobalNotification(notificationId, link) {
+            fetch('/api/notifications/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notification_id: notificationId })
+            }).finally(() => {
+                if (!link) {
+                    loadGlobalNotifications();
+                    return;
+                }
+                window.location.href = link.startsWith('#') ? `${authenticatedDashboardUrl}${link}` : link;
+            });
+        }
+
+        function markGlobalNotificationsRead() {
+            fetch('/api/notifications/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            }).finally(loadGlobalNotifications);
+        }
+
+        if (document.getElementById('globalNotificationList')) {
+            loadGlobalNotifications();
+            document.getElementById('globalNotificationButton')?.addEventListener('show.bs.dropdown', loadGlobalNotifications);
+            window.setInterval(loadGlobalNotifications, 60000);
         }
     </script>
 </body>

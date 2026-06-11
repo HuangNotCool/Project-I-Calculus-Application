@@ -39,21 +39,25 @@ def seeded_course(app):
     with app.app_context():
         teacher = User(
             username='teacher',
+            full_name='Nguyễn Văn Giáo Viên',
             password=generate_password_hash('password'),
             role='teacher'
         )
         other_teacher = User(
             username='other-teacher',
+            full_name='Trần Thị Giáo Viên',
             password=generate_password_hash('password'),
             role='teacher'
         )
         student = User(
             username='student',
+            full_name='Nguyễn Văn Sinh Viên',
             password=generate_password_hash('password'),
             role='student'
         )
         outsider = User(
             username='outsider',
+            full_name='Lê Thị Sinh Viên',
             password=generate_password_hash('password'),
             role='student'
         )

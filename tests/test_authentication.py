@@ -12,6 +12,7 @@ def set_csrf(client, token='auth-test-csrf'):
 def registration_payload(**overrides):
     payload = {
         '_csrf_token': 'auth-test-csrf',
+        'full_name': 'Nguyễn Văn An',
         'username': 'student.new',
         'password': 'Password123',
         'confirm_password': 'Password123',
@@ -32,7 +33,9 @@ def test_student_registration_saves_verified_profile(app, client):
     with app.app_context():
         user = User.query.filter_by(username='student.new').one()
         assert user.role == 'student'
+        assert user.full_name == 'Nguyễn Văn An'
         assert user.student_code == '20261234'
+        assert user.student_code_verified is False
         assert user.school_name == 'Đại học Bách Khoa Hà Nội'
         assert user.major == 'Khoa học máy tính'
         assert check_password_hash(user.password, 'Password123')
@@ -44,6 +47,15 @@ def test_registration_rejects_password_mismatch(app, client):
         '/register',
         data=registration_payload(confirm_password='Different123')
     )
+
+    assert response.status_code == 400
+    with app.app_context():
+        assert User.query.filter_by(username='student.new').first() is None
+
+
+def test_registration_requires_full_name(app, client):
+    set_csrf(client)
+    response = client.post('/register', data=registration_payload(full_name=''))
 
     assert response.status_code == 400
     with app.app_context():
@@ -66,6 +78,7 @@ def test_registration_rejects_duplicate_student_code(app, client):
     with app.app_context():
         db.session.add(User(
             username='existing',
+            full_name='Sinh Viên Đã Có',
             password='unused',
             role='student',
             student_code='20261234',

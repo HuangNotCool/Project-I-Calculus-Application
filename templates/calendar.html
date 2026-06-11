@@ -1,0 +1,388 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .calendar-shell { max-width: 1500px; }
+    .calendar-toolbar {
+        background: var(--bs-body-bg);
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+    .calendar-weekdays,
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+    }
+    .calendar-weekday {
+        padding: .75rem .5rem;
+        color: var(--bs-secondary-color);
+        font-size: .8rem;
+        font-weight: 700;
+        text-align: center;
+        text-transform: uppercase;
+    }
+    .calendar-day {
+        min-height: 138px;
+        border-top: 1px solid var(--bs-border-color);
+        border-right: 1px solid var(--bs-border-color);
+        padding: .5rem;
+        overflow: hidden;
+    }
+    .calendar-day:nth-child(7n) { border-right: 0; }
+    .calendar-day.is-outside { background: var(--bs-tertiary-bg); color: var(--bs-secondary-color); }
+    .calendar-day.is-today { box-shadow: inset 0 0 0 2px var(--bs-primary); }
+    .calendar-date {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-weight: 700;
+        font-size: .85rem;
+    }
+    .calendar-day.is-today .calendar-date { background: var(--bs-primary); color: #fff; }
+    .calendar-event {
+        display: block;
+        width: 100%;
+        border: 0;
+        border-left: 3px solid currentColor;
+        background: var(--bs-tertiary-bg);
+        color: var(--bs-body-color);
+        font-size: .75rem;
+        line-height: 1.25;
+        text-align: left;
+        padding: .35rem .4rem;
+        margin-top: .35rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .calendar-event.event-open { color: #087f5b; background: rgba(18, 184, 134, .12); }
+    .calendar-event.event-due { color: #c92a2a; background: rgba(250, 82, 82, .12); }
+    .calendar-event.event-result { color: #7048e8; background: rgba(121, 80, 242, .12); }
+    .agenda-date {
+        width: 52px;
+        flex: 0 0 52px;
+        text-align: center;
+        border-right: 1px solid var(--bs-border-color);
+    }
+    .agenda-item { border-bottom: 1px solid var(--bs-border-color); }
+    @media (max-width: 991.98px) {
+        .calendar-month-view { display: none; }
+        .calendar-mobile-note { display: block !important; }
+    }
+</style>
+
+<div class="container-fluid calendar-shell px-3 px-lg-4 mt-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+        <div>
+            <div class="text-primary fw-bold small text-uppercase mb-1">
+                {{ 'Lịch quản lý giảng dạy' if current_user.role == 'teacher' else 'Lịch học tập cá nhân' }}
+            </div>
+            <h1 class="h2 fw-bold mb-1">Lịch bài tập</h1>
+            <p class="text-muted mb-0">Theo dõi thời gian mở đề, hạn nộp và trạng thái kết quả theo từng lớp.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('teacher_dashboard') if current_user.role == 'teacher' else url_for('student_dashboard') }}"
+                class="btn btn-outline-secondary fw-bold">
+                <i class="fa-solid fa-arrow-left me-2"></i>Trang chính
+            </a>
+            <button class="btn btn-primary fw-bold" onclick="goToToday()">
+                <i class="fa-regular fa-calendar-check me-2"></i>Hôm nay
+            </button>
+        </div>
+    </div>
+
+    <div class="calendar-toolbar p-3 p-lg-4 shadow-sm rounded-3 mb-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-lg-4">
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-secondary" onclick="changeMonth(-1)" title="Tháng trước"><i class="fa-solid fa-chevron-left"></i></button>
+                    <h2 class="h4 fw-bold mb-0 text-center flex-grow-1" id="calendarMonthTitle">Đang tải...</h2>
+                    <button class="btn btn-outline-secondary" onclick="changeMonth(1)" title="Tháng sau"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4">
+                <label class="form-label small fw-bold text-muted">Lớp học</label>
+                <select id="calendarClassFilter" class="form-select" onchange="loadCalendarEvents()">
+                    <option value="">Tất cả lớp</option>
+                    {% for classroom in classes %}
+                    <option value="{{ classroom.id }}">{{ classroom.name }} · {{ classroom.code }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6 col-lg-4">
+                <label class="form-label small fw-bold text-muted">Trạng thái</label>
+                <select id="calendarStatusFilter" class="form-select" onchange="loadCalendarEvents()">
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="scheduled">Sắp mở</option>
+                    <option value="open">Đang mở</option>
+                    {% if current_user.role == 'student' %}<option value="submitted">Đã nộp</option>{% endif %}
+                    <option value="expired">Đã quá hạn</option>
+                    <option value="paused">Tạm dừng</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div id="calendarError" class="alert alert-danger d-none"></div>
+    <div class="d-none calendar-mobile-note alert alert-info">
+        Trên màn hình nhỏ, lịch được trình bày dưới dạng danh sách để dễ theo dõi.
+    </div>
+
+    <div class="row g-4">
+        <div class="col-xl-9 calendar-month-view">
+            <section class="bg-body shadow-sm rounded-3 overflow-hidden">
+                <div class="calendar-weekdays">
+                    <div class="calendar-weekday">Thứ 2</div>
+                    <div class="calendar-weekday">Thứ 3</div>
+                    <div class="calendar-weekday">Thứ 4</div>
+                    <div class="calendar-weekday">Thứ 5</div>
+                    <div class="calendar-weekday">Thứ 6</div>
+                    <div class="calendar-weekday">Thứ 7</div>
+                    <div class="calendar-weekday">Chủ nhật</div>
+                </div>
+                <div class="calendar-grid" id="calendarGrid"></div>
+            </section>
+        </div>
+
+        <div class="col-xl-3">
+            <section class="bg-body shadow-sm rounded-3 overflow-hidden">
+                <div class="p-3 border-bottom">
+                    <h2 class="h5 fw-bold mb-1">Lịch trong tháng</h2>
+                    <div class="small text-muted" id="agendaSummary">Đang tải...</div>
+                </div>
+                <div id="calendarAgenda">
+                    <div class="text-center py-5 text-muted"><i class="fa-solid fa-spinner fa-spin"></i></div>
+                </div>
+            </section>
+
+            <section class="bg-body shadow-sm rounded-3 overflow-hidden mt-4" id="unscheduledSection">
+                <div class="p-3 border-bottom">
+                    <h2 class="h6 fw-bold mb-1">Chưa đặt thời gian</h2>
+                    <div class="small text-muted">Các bài chưa có ngày mở hoặc hạn nộp.</div>
+                </div>
+                <div id="unscheduledList"></div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="calendarEventModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h2 class="modal-title h5 fw-bold" id="calendarEventTitle">Chi tiết bài tập</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="calendarEventBody"></div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Đóng</button>
+                <a class="btn btn-primary fw-bold" id="calendarEventLink" href="#">Mở nội dung</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let calendarCursor = new Date();
+    calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+    let calendarAssignments = [];
+
+    function calendarEscapeHtml(value) {
+        const element = document.createElement('div');
+        element.textContent = value ?? '';
+        return element.innerHTML;
+    }
+
+    function localDateKey(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    function parseLocalDate(value) {
+        return value ? new Date(value) : null;
+    }
+
+    function monthRange() {
+        const start = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+        const end = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + 1, 0);
+        return { start, end };
+    }
+
+    function formatDateTime(value) {
+        const date = parseLocalDate(value);
+        if (!date) return 'Không đặt';
+        return new Intl.DateTimeFormat('vi-VN', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        }).format(date);
+    }
+
+    function changeMonth(offset) {
+        calendarCursor = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth() + offset, 1);
+        loadCalendarEvents();
+    }
+
+    function goToToday() {
+        const today = new Date();
+        calendarCursor = new Date(today.getFullYear(), today.getMonth(), 1);
+        loadCalendarEvents();
+    }
+
+    function loadCalendarEvents() {
+        const { start, end } = monthRange();
+        const params = new URLSearchParams({
+            start: localDateKey(start),
+            end: localDateKey(end),
+            status: document.getElementById('calendarStatusFilter').value
+        });
+        const classId = document.getElementById('calendarClassFilter').value;
+        if (classId) params.set('class_id', classId);
+        document.getElementById('calendarMonthTitle').textContent =
+            `Tháng ${calendarCursor.getMonth() + 1}, ${calendarCursor.getFullYear()}`;
+
+        fetch(`/api/calendar-events?${params.toString()}`)
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) throw new Error(data.message || 'Không tải được lịch.');
+                calendarAssignments = data.assignments || [];
+                renderCalendarGrid();
+                renderAgenda();
+                renderUnscheduled(data.unscheduled || []);
+                document.getElementById('calendarError').classList.add('d-none');
+            })
+            .catch((error) => {
+                const errorBox = document.getElementById('calendarError');
+                errorBox.textContent = error.message;
+                errorBox.classList.remove('d-none');
+            });
+    }
+
+    function buildEventsByDate() {
+        const events = {};
+        calendarAssignments.forEach((assignment) => {
+            if (assignment.opens_at) {
+                const key = localDateKey(parseLocalDate(assignment.opens_at));
+                (events[key] ||= []).push({ type: 'open', label: 'Mở', assignment, time: assignment.opens_at });
+            }
+            if (assignment.due_at) {
+                const key = localDateKey(parseLocalDate(assignment.due_at));
+                const label = assignment.result_release_policy === 'after_due' ? 'Hạn & công bố' : 'Hạn nộp';
+                (events[key] ||= []).push({ type: 'due', label, assignment, time: assignment.due_at });
+            }
+        });
+        return events;
+    }
+
+    function renderCalendarGrid() {
+        const grid = document.getElementById('calendarGrid');
+        const eventsByDate = buildEventsByDate();
+        const firstDay = new Date(calendarCursor.getFullYear(), calendarCursor.getMonth(), 1);
+        const mondayOffset = (firstDay.getDay() + 6) % 7;
+        const gridStart = new Date(firstDay);
+        gridStart.setDate(firstDay.getDate() - mondayOffset);
+        const todayKey = localDateKey(new Date());
+        const cells = [];
+
+        for (let index = 0; index < 42; index += 1) {
+            const date = new Date(gridStart);
+            date.setDate(gridStart.getDate() + index);
+            const key = localDateKey(date);
+            const dayEvents = eventsByDate[key] || [];
+            const outside = date.getMonth() !== calendarCursor.getMonth();
+            cells.push(`
+                <div class="calendar-day ${outside ? 'is-outside' : ''} ${key === todayKey ? 'is-today' : ''}">
+                    <span class="calendar-date">${date.getDate()}</span>
+                    ${dayEvents.slice(0, 3).map((event) => `
+                        <button class="calendar-event event-${event.type}"
+                            onclick="openCalendarAssignment(${Number(event.assignment.id)})"
+                            title="${calendarEscapeHtml(event.assignment.title)}">
+                            ${calendarEscapeHtml(event.label)} · ${calendarEscapeHtml(event.assignment.title)}
+                        </button>
+                    `).join('')}
+                    ${dayEvents.length > 3 ? `<div class="small text-muted mt-1">+${dayEvents.length - 3} sự kiện</div>` : ''}
+                </div>
+            `);
+        }
+        grid.innerHTML = cells.join('');
+    }
+
+    function renderAgenda() {
+        const agenda = document.getElementById('calendarAgenda');
+        const summary = document.getElementById('agendaSummary');
+        const events = [];
+        calendarAssignments.forEach((assignment) => {
+            if (assignment.opens_at) events.push({ type: 'Mở đề', time: assignment.opens_at, assignment });
+            if (assignment.due_at) events.push({ type: 'Hạn nộp', time: assignment.due_at, assignment });
+        });
+        events.sort((a, b) => parseLocalDate(a.time) - parseLocalDate(b.time));
+        summary.textContent = `${events.length} mốc thời gian`;
+        if (!events.length) {
+            agenda.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-regular fa-calendar-xmark fs-2 mb-2"></i><div>Không có lịch trong tháng này.</div></div>';
+            return;
+        }
+        agenda.innerHTML = events.map((event) => {
+            const date = parseLocalDate(event.time);
+            return `
+                <button class="agenda-item btn w-100 text-start rounded-0 p-3"
+                    onclick="openCalendarAssignment(${Number(event.assignment.id)})">
+                    <div class="d-flex gap-3">
+                        <div class="agenda-date">
+                            <div class="fs-5 fw-bold">${date.getDate()}</div>
+                            <div class="small text-uppercase">Th${date.getMonth() + 1}</div>
+                        </div>
+                        <div class="min-w-0">
+                            <div class="small fw-bold ${event.type === 'Hạn nộp' ? 'text-danger' : 'text-success'}">${event.type} · ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}</div>
+                            <div class="fw-bold text-truncate">${calendarEscapeHtml(event.assignment.title)}</div>
+                            <div class="small text-muted text-truncate">${calendarEscapeHtml(event.assignment.class_name)}</div>
+                        </div>
+                    </div>
+                </button>`;
+        }).join('');
+    }
+
+    function renderUnscheduled(items) {
+        const section = document.getElementById('unscheduledSection');
+        const list = document.getElementById('unscheduledList');
+        section.classList.toggle('d-none', !items.length);
+        list.innerHTML = items.map((assignment) => `
+            <button class="btn w-100 text-start rounded-0 border-bottom p-3"
+                onclick="openCalendarAssignment(${Number(assignment.id)}, true)">
+                <div class="fw-bold">${calendarEscapeHtml(assignment.title)}</div>
+                <div class="small text-muted">${calendarEscapeHtml(assignment.class_name)}</div>
+            </button>
+        `).join('');
+        window.unscheduledCalendarAssignments = items;
+    }
+
+    function openCalendarAssignment(assignmentId, unscheduled = false) {
+        const source = unscheduled ? (window.unscheduledCalendarAssignments || []) : calendarAssignments;
+        const assignment = source.find((item) => Number(item.id) === Number(assignmentId));
+        if (!assignment) return;
+        document.getElementById('calendarEventTitle').textContent = assignment.title;
+        document.getElementById('calendarEventBody').innerHTML = `
+            <div class="d-flex justify-content-between gap-3 mb-3">
+                <div>
+                    <div class="small text-muted">Lớp học</div>
+                    <div class="fw-bold">${calendarEscapeHtml(assignment.class_name)} · ${calendarEscapeHtml(assignment.class_code)}</div>
+                </div>
+                <span class="badge text-bg-primary align-self-start">${calendarEscapeHtml(assignment.status_label)}</span>
+            </div>
+            ${assignment.description ? `<p>${calendarEscapeHtml(assignment.description)}</p>` : ''}
+            <div class="bg-body-tertiary rounded-3 p-3">
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2"><span>Mở đề</span><strong>${formatDateTime(assignment.opens_at)}</strong></div>
+                <div class="d-flex justify-content-between"><span>Hạn nộp</span><strong>${formatDateTime(assignment.due_at)}</strong></div>
+            </div>
+            ${assignment.score !== null ? `<div class="alert alert-success mt-3 mb-0">Điểm đã công bố: <strong>${assignment.score}/10</strong></div>` : ''}
+        `;
+        document.getElementById('calendarEventLink').href = assignment.detail_link;
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('calendarEventModal')).show();
+    }
+
+    document.addEventListener('DOMContentLoaded', loadCalendarEvents);
+</script>
+
+{% endblock %}

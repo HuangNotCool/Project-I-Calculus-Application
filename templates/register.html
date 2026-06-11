@@ -50,13 +50,21 @@
         <form method="POST" action="/register" id="registerForm">
             <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
             <div class="row g-4 mb-4">
-                
+
+                <div class="col-12">
+                    <label class="form-label fw-bold text-body">Họ và tên <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
+                        name="full_name" value="{{ form_data.full_name }}" minlength="2" maxlength="150"
+                        autocomplete="name" placeholder="VD: Nguyễn Văn An" required>
+                    <small class="text-muted">Tên này sẽ hiển thị trong lớp học, bài nộp và bảng điểm.</small>
+                </div>
+
                 <div class="col-12">
                     <label class="form-label fw-bold text-body">Tên đăng nhập <span class="text-danger">*</span></label>
                     <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
                         name="username" value="{{ form_data.username }}" minlength="3" maxlength="50"
                         pattern="[a-z0-9._-]+" autocomplete="username" placeholder="VD: nguyen.van.a" required>
-                    <small class="text-muted">Dùng chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.</small>
+                    <small class="text-muted">Chỉ dùng để đăng nhập. Dùng chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.</small>
                 </div>
 
                 <div class="col-md-6">

@@ -1062,6 +1062,202 @@ def serialize_assignment_summary(assignment, include_class=False, student_id=Non
     return data
 
 
+def build_teacher_class_detail(target_class):
+    students = sorted(
+        target_class.students,
+        key=lambda item: ((item.student_code or '').lower(), item.display_name.lower())
+    )
+    student_ids = {student.id for student in students}
+    assignments = (
+        Assignment.query
+        .filter_by(class_id=target_class.id, teacher_id=target_class.teacher_id)
+        .order_by(Assignment.created_at.desc(), Assignment.id.desc())
+        .all()
+    )
+    pending_requests = (
+        ClassJoinRequest.query
+        .filter_by(class_id=target_class.id, status='pending')
+        .order_by(ClassJoinRequest.requested_at.asc(), ClassJoinRequest.id.asc())
+        .all()
+    )
+
+    assignment_rows = []
+    submissions_by_assignment = {}
+    all_recorded_scores = []
+    total_submissions = 0
+    now = app_now()
+
+    for assignment in assignments:
+        submission_map = {
+            submission.student_id: submission
+            for submission in assignment.submissions
+            if submission.student_id in student_ids
+        }
+        submissions_by_assignment[assignment.id] = submission_map
+        scores = [submission.score or 0 for submission in submission_map.values()]
+        total_submissions += len(submission_map)
+        all_recorded_scores.extend(scores)
+
+        if not assignment.is_active:
+            status = 'paused'
+            status_label = 'Tạm dừng'
+            status_class = 'secondary'
+        elif assignment.opens_at and now < assignment.opens_at:
+            status = 'scheduled'
+            status_label = 'Sắp mở'
+            status_class = 'info'
+        elif assignment.due_at and now > assignment.due_at:
+            status = 'closed'
+            status_label = 'Đã đóng'
+            status_class = 'dark'
+        else:
+            status = 'open'
+            status_label = 'Đang mở'
+            status_class = 'success'
+
+        submitted_count = len(submission_map)
+        total_students = len(students)
+        assignment_rows.append({
+            'assignment': assignment,
+            'summary': serialize_assignment_summary(assignment),
+            'status': status,
+            'status_label': status_label,
+            'status_class': status_class,
+            'submitted_count': submitted_count,
+            'missing_count': max(total_students - submitted_count, 0),
+            'completion_rate': round((submitted_count / total_students) * 100, 1)
+            if total_students else 0,
+            'average_score': round(sum(scores) / len(scores), 2) if scores else None,
+            'highest_score': max(scores) if scores else None
+        })
+
+    gradebook_rows = []
+    for student in students:
+        cells = []
+        student_scores = []
+        for row in assignment_rows:
+            submission = submissions_by_assignment[row['assignment'].id].get(student.id)
+            if submission:
+                student_scores.append(submission.score or 0)
+            cells.append({
+                'submitted': bool(submission),
+                'score': submission.score if submission else None,
+                'submitted_at': (
+                    submission.submitted_at.strftime('%d/%m/%Y %H:%M')
+                    if submission and submission.submitted_at else ''
+                )
+            })
+        gradebook_rows.append({
+            'student': student,
+            'cells': cells,
+            'submitted_count': len(student_scores),
+            'average_score': round(sum(student_scores) / len(student_scores), 2)
+            if student_scores else None
+        })
+
+    total_expected_submissions = len(students) * len(assignments)
+    return {
+        'students': students,
+        'pending_requests': pending_requests,
+        'assignment_rows': assignment_rows,
+        'gradebook_rows': gradebook_rows,
+        'summary': {
+            'student_count': len(students),
+            'pending_count': len(pending_requests),
+            'assignment_count': len(assignments),
+            'open_assignment_count': sum(
+                1 for row in assignment_rows if row['status'] == 'open'
+            ),
+            'total_submissions': total_submissions,
+            'completion_rate': round(
+                (total_submissions / total_expected_submissions) * 100, 1
+            ) if total_expected_submissions else 0,
+            'average_score': round(
+                sum(all_recorded_scores) / len(all_recorded_scores), 2
+            ) if all_recorded_scores else None
+        }
+    }
+
+
+def get_calendar_assignments(user):
+    if user.role == 'teacher':
+        return (
+            Assignment.query
+            .filter_by(teacher_id=user.id)
+            .order_by(Assignment.opens_at.asc(), Assignment.due_at.asc(), Assignment.id.asc())
+            .all()
+        )
+
+    class_ids = [item.id for item in user.enrolled_classes]
+    if not class_ids:
+        return []
+    return (
+        Assignment.query
+        .filter(Assignment.class_id.in_(class_ids))
+        .order_by(Assignment.opens_at.asc(), Assignment.due_at.asc(), Assignment.id.asc())
+        .all()
+    )
+
+
+def serialize_calendar_assignment(assignment, user):
+    now = app_now()
+    if not assignment.is_active:
+        status = 'paused'
+        status_label = 'Tạm dừng'
+    elif assignment.opens_at and now < assignment.opens_at:
+        status = 'scheduled'
+        status_label = 'Sắp mở'
+    elif assignment.due_at and now > assignment.due_at:
+        status = 'expired'
+        status_label = 'Đã quá hạn'
+    else:
+        status = 'open'
+        status_label = 'Đang mở'
+
+    submitted = False
+    score = None
+    if user.role == 'student':
+        submission = Submission.query.filter_by(
+            assignment_id=assignment.id,
+            student_id=user.id
+        ).first()
+        submitted = bool(submission)
+        if submission and is_assignment_result_published(assignment):
+            score = submission.score
+        if submitted:
+            status = 'submitted'
+            status_label = 'Đã nộp'
+
+    class_name = assignment.classroom.name if assignment.classroom else ''
+    class_code = assignment.classroom.code if assignment.classroom else ''
+    detail_link = (
+        f'/teacher/classes/{assignment.class_id}#classAssignments'
+        if user.role == 'teacher'
+        else '/student-dashboard#tab-practice'
+    )
+    return {
+        'id': assignment.id,
+        'title': assignment.title,
+        'description': assignment.description or '',
+        'class_id': assignment.class_id,
+        'class_name': class_name,
+        'class_code': class_code,
+        'opens_at': assignment.opens_at.strftime('%Y-%m-%dT%H:%M')
+        if assignment.opens_at else '',
+        'due_at': assignment.due_at.strftime('%Y-%m-%dT%H:%M')
+        if assignment.due_at else '',
+        'duration_minutes': assignment.duration_minutes,
+        'status': status,
+        'status_label': status_label,
+        'submitted': submitted,
+        'score': score,
+        'is_active': bool(assignment.is_active),
+        'result_release_policy': assignment.result_release_policy or 'immediate',
+        'result_published': is_assignment_result_published(assignment),
+        'detail_link': detail_link
+    }
+
+
 def parse_due_at(raw_value):
     raw_value = str(raw_value or '').strip()
     if not raw_value:
@@ -1087,6 +1283,10 @@ def normalize_username(value):
     return str(value or '').strip().lower()
 
 
+def normalize_full_name(value):
+    return re.sub(r'\s+', ' ', str(value or '').strip())
+
+
 def normalize_student_code(value):
     return re.sub(r'\s+', '', str(value or '').strip()).upper()
 
@@ -1096,6 +1296,16 @@ def validate_username(username):
         return 'Tên đăng nhập phải có từ 3 đến 50 ký tự.'
     if not re.fullmatch(r'[a-z0-9._-]+', username):
         return 'Tên đăng nhập chỉ được gồm chữ thường không dấu, số, dấu chấm, gạch dưới hoặc gạch ngang.'
+    return None
+
+
+def validate_full_name(full_name):
+    if not 2 <= len(full_name) <= 150:
+        return 'Họ và tên phải có từ 2 đến 150 ký tự.'
+    if any(ord(character) < 32 for character in full_name):
+        return 'Họ và tên chứa ký tự không hợp lệ.'
+    if not any(character.isalpha() for character in full_name):
+        return 'Họ và tên phải có ít nhất một chữ cái.'
     return None
 
 
@@ -1511,28 +1721,62 @@ def serialize_student_badge_progress(student):
 
 def ensure_due_notifications(student):
     now = app_now()
-    soon = now + timedelta(hours=24)
     class_ids = [item.id for item in student.enrolled_classes]
     if not class_ids:
         return
+
     assignments = Assignment.query.filter(
         Assignment.class_id.in_(class_ids),
         Assignment.is_active.is_(True),
-        Assignment.due_at.isnot(None),
-        Assignment.due_at >= now,
-        Assignment.due_at <= soon
     ).all()
+
     for assignment in assignments:
         if Submission.query.filter_by(assignment_id=assignment.id, student_id=student.id).first():
             continue
-        create_notification(
-            student.id,
-            'Bài tập sắp hết hạn',
-            f'{assignment.title} sẽ đóng lúc {assignment.due_at.strftime("%d/%m/%Y %H:%M")}.',
-            category='warning',
-            link='#tab-practice',
-            dedupe_key=f'assignment-due-{assignment.id}'
-        )
+
+        if assignment.opens_at:
+            hours_until_open = (assignment.opens_at - now).total_seconds() / 3600
+            if 0 < hours_until_open <= 24:
+                create_notification(
+                    student.id,
+                    'Bài tập sắp mở',
+                    f'{assignment.title} sẽ mở lúc {assignment.opens_at.strftime("%d/%m/%Y %H:%M")}.',
+                    category='info',
+                    link='/calendar',
+                    dedupe_key=f'assignment-open-24h-{assignment.id}'
+                )
+
+        if not assignment.due_at:
+            continue
+
+        hours_until_due = (assignment.due_at - now).total_seconds() / 3600
+        if 0 < hours_until_due <= 3:
+            create_notification(
+                student.id,
+                'Bài tập sắp hết hạn trong 3 giờ',
+                f'{assignment.title} sẽ đóng lúc {assignment.due_at.strftime("%d/%m/%Y %H:%M")}.',
+                category='danger',
+                link='/calendar',
+                dedupe_key=f'assignment-due-3h-{assignment.id}'
+            )
+        elif 3 < hours_until_due <= 24:
+            create_notification(
+                student.id,
+                'Bài tập sắp hết hạn trong 24 giờ',
+                f'{assignment.title} sẽ đóng lúc {assignment.due_at.strftime("%d/%m/%Y %H:%M")}.',
+                category='warning',
+                link='/calendar',
+                dedupe_key=f'assignment-due-24h-{assignment.id}'
+            )
+        elif -168 <= hours_until_due <= 0:
+            create_notification(
+                student.id,
+                'Bài tập đã quá hạn',
+                f'{assignment.title} đã đóng lúc {assignment.due_at.strftime("%d/%m/%Y %H:%M")}.',
+                category='secondary',
+                link='/calendar',
+                dedupe_key=f'assignment-overdue-{assignment.id}'
+            )
 
 
 def save_attempt_submission(assignment, attempt, student_id, answers, completion_reason='submitted'):
@@ -1571,6 +1815,17 @@ def save_attempt_submission(assignment, attempt, student_id, answers, completion
         link='#tab-practice',
         dedupe_key=f'attempt-submitted-{attempt.id}'
     )
+    if assignment.teacher_id:
+        student = db.session.get(User, student_id)
+        create_notification(
+            assignment.teacher_id,
+            'Có bài nộp mới',
+            f'{student.display_name if student else "Một sinh viên"} đã nộp {assignment.title} '
+            f'(lần {attempt.attempt_number}).',
+            category='info',
+            link=f'/teacher/classes/{assignment.class_id}#classAssignments',
+            dedupe_key=f'teacher-attempt-submitted-{attempt.id}'
+        )
     db.session.flush()
     award_student_badges(db.session.get(User, student_id))
     db.session.commit()
@@ -1880,11 +2135,17 @@ def finalize_expired_attempts_command():
 
 @app.cli.command('create-teacher')
 @click.option('--username', prompt='Tên đăng nhập giáo viên')
+@click.option('--full-name', prompt='Họ và tên giáo viên')
 @click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True)
-def create_teacher_command(username, password):
+def create_teacher_command(username, full_name, password):
     """Create a teacher account outside public registration."""
     username = normalize_username(username)
-    validation_error = validate_username(username) or validate_password(password)
+    full_name = normalize_full_name(full_name)
+    validation_error = (
+        validate_username(username)
+        or validate_full_name(full_name)
+        or validate_password(password)
+    )
     if validation_error:
         raise click.ClickException(validation_error)
     if User.query.filter(func.lower(User.username) == username).first():
@@ -1892,6 +2153,7 @@ def create_teacher_command(username, password):
 
     db.session.add(User(
         username=username,
+        full_name=full_name,
         password=generate_password_hash(password),
         role='teacher'
     ))
@@ -1917,12 +2179,14 @@ def register():
         return redirect(dashboard_url_for(current_user))
 
     form_data = {
+        'full_name': '',
         'username': '',
         'student_code': '',
         'school_name': 'Đại học Bách Khoa Hà Nội',
         'major': ''
     }
     if request.method == 'POST':
+        full_name = normalize_full_name(request.form.get('full_name'))
         username = normalize_username(request.form.get('username'))
         password = str(request.form.get('password') or '')
         confirm_password = str(request.form.get('confirm_password') or '')
@@ -1930,6 +2194,7 @@ def register():
         school_name = str(request.form.get('school_name') or '').strip()
         major = str(request.form.get('major') or '').strip()
         form_data.update({
+            'full_name': full_name,
             'username': username,
             'student_code': student_code,
             'school_name': school_name,
@@ -1937,7 +2202,8 @@ def register():
         })
 
         validation_error = (
-            validate_username(username)
+            validate_full_name(full_name)
+            or validate_username(username)
             or validate_password(password)
             or validate_student_profile(student_code, school_name, major)
         )
@@ -1957,6 +2223,7 @@ def register():
 
         new_user = User(
             username=username,
+            full_name=full_name,
             password=generate_password_hash(password),
             role='student',
             student_code=student_code,
@@ -2020,8 +2287,9 @@ def profile():
 @login_required
 @rate_limit(10, 300, 'profile-update')
 def update_profile():
+    full_name = normalize_full_name(request.form.get('full_name'))
     username = normalize_username(request.form.get('username'))
-    validation_error = validate_username(username)
+    validation_error = validate_full_name(full_name) or validate_username(username)
     if validation_error:
         flash(validation_error, 'danger')
         return redirect(url_for('profile'))
@@ -2034,11 +2302,23 @@ def update_profile():
         flash('Tên đăng nhập đã được sử dụng.', 'danger')
         return redirect(url_for('profile'))
 
+    current_user.full_name = full_name
     current_user.username = username
     if current_user.role == 'student':
         student_code = normalize_student_code(request.form.get('student_code'))
         school_name = str(request.form.get('school_name') or '').strip()
         major = str(request.form.get('major') or '').strip()
+        if (
+            current_user.student_code_verified
+            and student_code != current_user.student_code
+        ):
+            db.session.rollback()
+            flash(
+                'Mã số sinh viên đã được xác minh nên không thể tự thay đổi. '
+                'Hãy liên hệ giáo viên nếu thông tin bị sai.',
+                'danger'
+            )
+            return redirect(url_for('profile'))
         validation_error = validate_student_profile(student_code, school_name, major)
         if validation_error:
             db.session.rollback()
@@ -2106,6 +2386,29 @@ def teacher_dashboard():
     my_classes = Class.query.filter_by(teacher_id=current_user.id).all()
     
     return render_template('teacher_dashboard.html', classes=my_classes)
+
+
+@app.route('/teacher/classes/<int:class_id>')
+@teacher_owns_class
+def teacher_class_detail(class_id):
+    detail = build_teacher_class_detail(g.target_class)
+    return render_template(
+        'teacher_class_detail.html',
+        classroom=g.target_class,
+        **detail
+    )
+
+
+@app.route('/calendar')
+@login_required
+def learning_calendar():
+    if current_user.role == 'student':
+        ensure_due_notifications(current_user)
+        db.session.commit()
+        classes = list(current_user.enrolled_classes)
+    else:
+        classes = Class.query.filter_by(teacher_id=current_user.id).order_by(Class.name.asc()).all()
+    return render_template('calendar.html', classes=classes)
 
 
 # =====================================================================
@@ -2510,7 +2813,14 @@ def api_get_class_students(class_id):
         students_data.append({
             'id': student.id,
             'username': student.username,
+            'full_name': student.full_name,
+            'display_name': student.display_name,
             'student_code': student.student_code or '',
+            'student_code_verified': bool(student.student_code_verified),
+            'student_code_verified_at': (
+                student.student_code_verified_at.strftime('%Y-%m-%d %H:%M')
+                if student.student_code_verified_at else ''
+            ),
             'school_name': student.school_name or '',
             'major': student.major or ''
         })
@@ -2530,12 +2840,122 @@ def api_get_class_students(class_id):
         'pending_requests': [{
             'id': item.id,
             'username': item.student.username,
+            'full_name': item.student.full_name,
+            'display_name': item.student.display_name,
             'student_code': item.student.student_code or '',
+            'student_code_verified': bool(item.student.student_code_verified),
             'school_name': item.student.school_name or '',
             'major': item.student.major or '',
             'requested_at': item.requested_at.strftime('%Y-%m-%d %H:%M') if item.requested_at else ''
         } for item in pending_requests]
     })
+
+
+@app.route('/api/teacher/class/<int:class_id>/students/<int:student_id>/verify-code', methods=['PUT'])
+@teacher_owns_class
+def api_verify_student_code(class_id, student_id):
+    student = db.session.get(User, student_id)
+    if not student or student not in g.target_class.students:
+        return jsonify({'success': False, 'message': 'Sinh viên không thuộc lớp này.'}), 404
+    if student.role != 'student' or not student.student_code:
+        return jsonify({'success': False, 'message': 'Sinh viên chưa có mã số hợp lệ.'}), 400
+
+    verified = parse_bool((request.get_json() or {}).get('verified'), default=True)
+    student.student_code_verified = verified
+    student.student_code_verified_at = app_now() if verified else None
+    student.student_code_verified_by = current_user.id if verified else None
+    create_notification(
+        student.id,
+        'Mã số sinh viên đã được xác minh' if verified else 'Xác minh mã số sinh viên đã được thu hồi',
+        (
+            f'Mã số {student.student_code} đã được xác minh trong lớp {g.target_class.name}.'
+            if verified
+            else f'Giáo viên đã thu hồi xác minh mã số {student.student_code}. Hãy kiểm tra lại hồ sơ.'
+        ),
+        category='success' if verified else 'warning',
+        link='/profile',
+        dedupe_key=(
+            f'student-code-verified-{student.id}-{student.student_code}'
+            if verified
+            else f'student-code-unverified-{student.id}-{int(app_now().timestamp())}'
+        )
+    )
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'verified': verified,
+        'message': 'Đã xác minh mã số sinh viên.' if verified else 'Đã thu hồi xác minh.'
+    })
+
+
+@app.route('/api/teacher/class/<int:class_id>/settings', methods=['PUT'])
+@teacher_owns_class
+def api_update_class_settings(class_id):
+    data = request.get_json() or {}
+    name = str(data.get('name') or '').strip()
+    description = str(data.get('description') or '').strip()
+    code = str(data.get('code') or '').strip().upper()
+    join_policy = str(data.get('join_policy') or '').strip().lower()
+
+    if not name:
+        return jsonify({'success': False, 'message': 'Tên lớp không được để trống.'}), 400
+    if not re.fullmatch(r'[A-Z0-9-]{4,20}', code):
+        return jsonify({
+            'success': False,
+            'message': 'Mã lớp chỉ gồm chữ in hoa, số, dấu gạch ngang và dài từ 4 đến 20 ký tự.'
+        }), 400
+    if join_policy not in {'open', 'approval'}:
+        return jsonify({'success': False, 'message': 'Chế độ tham gia lớp không hợp lệ.'}), 400
+
+    duplicate_code = Class.query.filter(
+        Class.code == code,
+        Class.id != g.target_class.id
+    ).first()
+    if duplicate_code:
+        return jsonify({'success': False, 'message': 'Mã lớp này đã được sử dụng.'}), 409
+
+    g.target_class.name = name
+    g.target_class.description = description
+    g.target_class.code = code
+    g.target_class.join_policy = join_policy
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'message': 'Đã cập nhật thông tin lớp học.',
+        'class': {
+            'id': g.target_class.id,
+            'name': g.target_class.name,
+            'description': g.target_class.description or '',
+            'code': g.target_class.code,
+            'join_policy': g.target_class.join_policy
+        }
+    })
+
+
+@app.route('/api/teacher/class/<int:class_id>/students/<int:student_id>', methods=['DELETE'])
+@teacher_owns_class
+def api_remove_class_student(class_id, student_id):
+    student = db.session.get(User, student_id)
+    if not student or student not in g.target_class.students:
+        return jsonify({'success': False, 'message': 'Sinh viên không còn thuộc lớp này.'}), 404
+
+    g.target_class.students.remove(student)
+    join_request = ClassJoinRequest.query.filter_by(
+        class_id=class_id,
+        student_id=student_id
+    ).first()
+    if join_request:
+        db.session.delete(join_request)
+    create_notification(
+        student.id,
+        'Đã rời khỏi lớp học',
+        f'Bạn đã được xóa khỏi lớp {g.target_class.name}.',
+        category='warning',
+        link='#tab-my-classes',
+        dedupe_key=f'class-removed-{class_id}-{student_id}-{int(app_now().timestamp())}'
+    )
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã xóa sinh viên khỏi lớp.'})
 
 
 @app.route('/api/teacher/class/<int:class_id>/join-requests/<int:request_id>/<action>', methods=['POST'])
@@ -2600,7 +3020,7 @@ def student_join_class():
         return jsonify({'success': False, 'message': 'Bạn đã tham gia lớp học này rồi!'})
 
     teacher = db.session.get(User, target_class.teacher_id)
-    teacher_name = teacher.username if teacher else 'Giáo viên'
+    teacher_name = teacher.display_name if teacher else 'Giáo viên'
     existing_request = ClassJoinRequest.query.filter_by(
         class_id=target_class.id,
         student_id=current_user.id
@@ -2627,7 +3047,7 @@ def student_join_class():
         create_notification(
             target_class.teacher_id,
             'Có yêu cầu tham gia lớp',
-            f'{current_user.username} ({current_user.student_code or "chưa có mã SV"}) muốn tham gia lớp {target_class.name}.',
+            f'{current_user.display_name} ({current_user.student_code or "chưa có mã SV"}) muốn tham gia lớp {target_class.name}.',
             category='info',
             link='#tab-class-management',
             dedupe_key=f'class-join-request-{target_class.id}-{current_user.id}-{int(app_now().timestamp())}'
@@ -2659,6 +3079,65 @@ def student_join_class():
             'name': target_class.name,
             'teacher': teacher_name
         }
+    })
+
+
+@app.route('/api/student/join-requests/<int:request_id>', methods=['DELETE'])
+@role_required('student')
+def api_cancel_class_join_request(request_id):
+    join_request = ClassJoinRequest.query.filter_by(
+        id=request_id,
+        student_id=current_user.id,
+        status='pending'
+    ).first()
+    if not join_request:
+        return jsonify({
+            'success': False,
+            'message': 'Yêu cầu không tồn tại hoặc đã được xử lý.'
+        }), 404
+
+    join_request.status = 'canceled'
+    join_request.responded_at = app_now()
+    create_notification(
+        join_request.classroom.teacher_id,
+        'Sinh viên đã hủy yêu cầu vào lớp',
+        f'{current_user.display_name} đã hủy yêu cầu tham gia lớp {join_request.classroom.name}.',
+        category='secondary',
+        link=f'/teacher/classes/{join_request.class_id}#classMembers',
+        dedupe_key=f'class-join-canceled-{join_request.id}-{int(app_now().timestamp())}'
+    )
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Đã hủy yêu cầu tham gia lớp.'})
+
+
+@app.route('/api/student/classes/<int:class_id>', methods=['DELETE'])
+@role_required('student')
+def api_student_leave_class(class_id):
+    target_class = db.get_or_404(Class, class_id)
+    if current_user not in target_class.students:
+        return jsonify({'success': False, 'message': 'Bạn không còn thuộc lớp này.'}), 404
+
+    target_class.students.remove(current_user)
+    join_request = ClassJoinRequest.query.filter_by(
+        class_id=class_id,
+        student_id=current_user.id
+    ).first()
+    if join_request:
+        join_request.status = 'left'
+        join_request.responded_at = app_now()
+    create_notification(
+        target_class.teacher_id,
+        'Sinh viên đã rời lớp',
+        f'{current_user.display_name} ({current_user.student_code or "chưa có mã SV"}) '
+        f'đã rời lớp {target_class.name}.',
+        category='warning',
+        link=f'/teacher/classes/{target_class.id}#classMembers',
+        dedupe_key=f'class-left-{target_class.id}-{current_user.id}-{int(app_now().timestamp())}'
+    )
+    db.session.commit()
+    return jsonify({
+        'success': True,
+        'message': 'Đã rời lớp. Các bài đã nộp và điểm cũ vẫn được lưu.'
     })
 
 
@@ -3225,6 +3704,8 @@ def api_teacher_assignment_results(assignment_id):
         rows.append({
             'student_id': student.id,
             'username': student.username,
+            'full_name': student.full_name,
+            'display_name': student.display_name,
             'submitted': bool(submission),
             'score': submission.score if submission else None,
             'correct_count': submission.correct_count if submission else None,
@@ -3275,7 +3756,7 @@ def api_teacher_assignment_results_csv(assignment_id):
         ).count()
         selected_attempt = get_submission_attempt(assignment, submission)
         writer.writerow([
-            student.username,
+            student.display_name,
             'Đã nộp' if submission else 'Chưa nộp',
             submission.score if submission else '',
             submission.correct_count if submission else '',
@@ -3317,6 +3798,55 @@ def api_student_assignments():
             serialize_assignment_summary(item, include_class=True, student_id=current_user.id)
             for item in assignments
         ]
+    })
+
+
+@app.route('/api/calendar-events', methods=['GET'])
+@login_required
+def api_calendar_events():
+    if current_user.role == 'student':
+        ensure_due_notifications(current_user)
+        db.session.commit()
+
+    class_id = request.args.get('class_id', type=int)
+    status_filter = str(request.args.get('status') or '').strip().lower()
+    start_raw = str(request.args.get('start') or '').strip()
+    end_raw = str(request.args.get('end') or '').strip()
+    start_date = None
+    end_date = None
+    try:
+        if start_raw:
+            start_date = datetime.strptime(start_raw, '%Y-%m-%d')
+        if end_raw:
+            end_date = datetime.strptime(end_raw, '%Y-%m-%d') + timedelta(days=1)
+    except ValueError:
+        return jsonify({'success': False, 'message': 'Khoảng thời gian không hợp lệ.'}), 400
+
+    items = []
+    unscheduled = []
+    for assignment in get_calendar_assignments(current_user):
+        data = serialize_calendar_assignment(assignment, current_user)
+        if class_id and data['class_id'] != class_id:
+            continue
+        if status_filter and status_filter != 'all' and data['status'] != status_filter:
+            continue
+
+        dates = [value for value in (assignment.opens_at, assignment.due_at) if value]
+        if not dates:
+            unscheduled.append(data)
+            continue
+        if start_date and max(dates) < start_date:
+            continue
+        if end_date and min(dates) >= end_date:
+            continue
+        items.append(data)
+
+    items.sort(key=lambda item: item['due_at'] or item['opens_at'] or '9999')
+    return jsonify({
+        'success': True,
+        'assignments': items,
+        'unscheduled': unscheduled,
+        'generated_at': app_now().strftime('%Y-%m-%dT%H:%M')
     })
 
 

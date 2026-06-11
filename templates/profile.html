@@ -8,7 +8,8 @@
                 <div class="mb-3">
                     <i class="fa-solid fa-user-graduate text-primary" style="font-size: 5rem;"></i>
                 </div>
-                <h4 class="fw-bold mb-1">{{ user.username }}</h4>
+                <h4 class="fw-bold mb-1">{{ user.display_name }}</h4>
+                <div class="text-muted small mb-2">@{{ user.username }}</div>
                 <span class="badge bg-primary mb-3">
                     {{ 'Sinh viên' if user.role == 'student' else 'Giảng viên' }}
                 </span>
@@ -17,6 +18,11 @@
                     <li class="list-group-item px-0">
                         <span class="text-muted d-block small"><i class="fa-solid fa-id-card me-2"></i>Mã số sinh viên</span>
                         <strong>{{ user.student_code or 'Chưa cập nhật' }}</strong>
+                        {% if user.student_code_verified %}
+                        <span class="badge text-bg-success ms-2">
+                            <i class="fa-solid fa-circle-check me-1"></i>Đã xác minh
+                        </span>
+                        {% endif %}
                     </li>
                     <li class="list-group-item px-0">
                         <span class="text-muted d-block small"><i class="fa-solid fa-school me-2"></i>Trường</span>
@@ -48,15 +54,35 @@
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <div class="row g-3">
                         <div class="col-12">
+                            <label class="form-label fw-bold">Họ và tên</label>
+                            <input type="text" name="full_name" value="{{ user.full_name or '' }}" minlength="2" maxlength="150"
+                                autocomplete="name" class="form-control bg-body-tertiary border-0 py-2" required>
+                            <div class="form-text">Tên hiển thị trong lớp học và bảng điểm.</div>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label fw-bold">Tên đăng nhập</label>
                             <input type="text" name="username" value="{{ user.username }}" minlength="3" maxlength="50"
                                 pattern="[a-z0-9._-]+" class="form-control bg-body-tertiary border-0 py-2" required>
+                            <div class="form-text">Dùng để đăng nhập, không dùng làm tên hiển thị trong lớp.</div>
                         </div>
                         {% if user.role == 'student' %}
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Mã số sinh viên</label>
+                            <label class="form-label fw-bold">
+                                Mã số sinh viên
+                                {% if user.student_code_verified %}
+                                <span class="badge text-bg-success ms-1">Đã xác minh</span>
+                                {% endif %}
+                            </label>
                             <input type="text" name="student_code" value="{{ user.student_code or '' }}" minlength="5" maxlength="30"
-                                pattern="[A-Za-z0-9-]+" class="form-control bg-body-tertiary border-0 py-2" required>
+                                pattern="[A-Za-z0-9-]+" class="form-control bg-body-tertiary border-0 py-2"
+                                {{ 'readonly' if user.student_code_verified else '' }} required>
+                            {% if user.student_code_verified %}
+                            <div class="form-text text-success">
+                                Mã đã được giáo viên xác minh. Liên hệ giáo viên nếu cần sửa.
+                            </div>
+                            {% else %}
+                            <div class="form-text">Mỗi mã số sinh viên chỉ được dùng cho một tài khoản.</div>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-bold">Trường</label>

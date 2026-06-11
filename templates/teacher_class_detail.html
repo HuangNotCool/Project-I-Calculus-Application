@@ -1,0 +1,582 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<style>
+    .class-shell { max-width: 1440px; }
+    .class-hero {
+        background: #075ecb;
+        color: #fff;
+        border-radius: 8px;
+    }
+    .metric-card { border-radius: 8px; }
+    .metric-icon {
+        width: 42px;
+        height: 42px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        flex: 0 0 auto;
+    }
+    .class-tabs .nav-link {
+        color: var(--bs-secondary-color);
+        font-weight: 700;
+        border: 0;
+        border-bottom: 3px solid transparent;
+        border-radius: 0;
+        padding: .9rem 1rem;
+        white-space: nowrap;
+    }
+    .class-tabs .nav-link.active {
+        color: #0d6efd;
+        background: transparent;
+        border-bottom-color: #0d6efd;
+    }
+    .gradebook-table th,
+    .gradebook-table td {
+        min-width: 120px;
+        vertical-align: middle;
+    }
+    .gradebook-table th:first-child,
+    .gradebook-table td:first-child {
+        min-width: 220px;
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--bs-body-bg);
+    }
+    .assignment-progress { height: 7px; }
+    @media (max-width: 767.98px) {
+        .class-hero .class-actions { width: 100%; }
+        .class-hero .class-actions .btn { flex: 1; }
+    }
+</style>
+
+<div class="container-fluid class-shell px-3 px-lg-4 mt-4">
+    <div class="mb-3">
+        <a href="{{ url_for('teacher_dashboard') }}#tab-class-management"
+            class="text-decoration-none fw-bold">
+            <i class="fa-solid fa-arrow-left me-2"></i>Danh sách lớp học
+        </a>
+    </div>
+
+    <section class="class-hero p-4 p-lg-5 mb-4 shadow-sm">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-4">
+            <div>
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                    <span class="badge text-bg-light text-primary px-3 py-2 font-monospace" id="classCodeLabel">
+                        {{ classroom.code }}
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="copyClassCode()" title="Sao chép mã lớp">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                    {% if classroom.join_policy == 'approval' %}
+                    <span class="badge bg-warning text-dark px-3 py-2">Cần duyệt thành viên</span>
+                    {% else %}
+                    <span class="badge bg-success px-3 py-2">Vào tự do bằng mã</span>
+                    {% endif %}
+                </div>
+                <h1 class="h2 fw-bold mb-2">{{ classroom.name }}</h1>
+                <p class="mb-0 opacity-75">{{ classroom.description or 'Chưa có mô tả lớp học.' }}</p>
+            </div>
+            <div class="class-actions d-flex gap-2 flex-wrap">
+                <button class="btn btn-light text-primary fw-bold" data-bs-toggle="modal" data-bs-target="#classSettingsModal">
+                    <i class="fa-solid fa-gear me-2"></i>Cài đặt
+                </button>
+                <a href="{{ url_for('teacher_dashboard') }}#tab-exam-bank" class="btn btn-outline-light fw-bold">
+                    <i class="fa-solid fa-paper-plane me-2"></i>Giao đề
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
+                <div class="card-body p-3 p-lg-4 d-flex align-items-center gap-3">
+                    <span class="metric-icon bg-primary-subtle text-primary"><i class="fa-solid fa-users"></i></span>
+                    <div><div class="fs-4 fw-bold">{{ summary.student_count }}</div><div class="small text-muted">Sinh viên</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
+                <div class="card-body p-3 p-lg-4 d-flex align-items-center gap-3">
+                    <span class="metric-icon bg-warning-subtle text-warning-emphasis"><i class="fa-solid fa-user-clock"></i></span>
+                    <div><div class="fs-4 fw-bold">{{ summary.pending_count }}</div><div class="small text-muted">Chờ duyệt</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
+                <div class="card-body p-3 p-lg-4 d-flex align-items-center gap-3">
+                    <span class="metric-icon bg-success-subtle text-success"><i class="fa-solid fa-file-circle-check"></i></span>
+                    <div><div class="fs-4 fw-bold">{{ summary.completion_rate }}%</div><div class="small text-muted">Tỷ lệ hoàn thành</div></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-xl-3">
+            <div class="card metric-card border-0 shadow-sm h-100">
+                <div class="card-body p-3 p-lg-4 d-flex align-items-center gap-3">
+                    <span class="metric-icon bg-info-subtle text-info-emphasis"><i class="fa-solid fa-chart-simple"></i></span>
+                    <div>
+                        <div class="fs-4 fw-bold">{{ summary.average_score if summary.average_score is not none else '-' }}</div>
+                        <div class="small text-muted">Điểm trung bình</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+        <div class="card-header bg-body px-3 px-lg-4 pt-2 border-bottom">
+            <ul class="nav class-tabs flex-nowrap overflow-auto" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#classOverview" type="button"><i class="fa-solid fa-chart-pie me-2"></i>Tổng quan</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#classAssignments" type="button"><i class="fa-solid fa-clipboard-list me-2"></i>Bài đã giao</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#classMembers" type="button"><i class="fa-solid fa-user-group me-2"></i>Thành viên</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#classGradebook" type="button"><i class="fa-solid fa-table-list me-2"></i>Bảng điểm</button></li>
+            </ul>
+        </div>
+
+        <div class="card-body p-3 p-lg-4">
+            <div class="tab-content">
+                <div class="tab-pane fade show active" id="classOverview">
+                    <div class="row g-4">
+                        <div class="col-lg-7">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h2 class="h5 fw-bold mb-0">Tiến độ bài tập</h2>
+                                <span class="small text-muted">{{ summary.open_assignment_count }} bài đang mở</span>
+                            </div>
+                            {% for row in assignment_rows[:5] %}
+                            <div class="border-bottom py-3">
+                                <div class="d-flex justify-content-between align-items-start gap-3">
+                                    <div>
+                                        <button class="btn btn-link text-start text-decoration-none fw-bold p-0"
+                                            onclick="openAssignmentResults({{ row.assignment.id }})">
+                                            {{ row.assignment.title }}
+                                        </button>
+                                        <div class="small text-muted mt-1">
+                                            {{ row.submitted_count }}/{{ summary.student_count }} đã nộp
+                                            {% if row.assignment.due_at %} · Hạn {{ row.assignment.due_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
+                                        </div>
+                                    </div>
+                                    <span class="badge text-bg-{{ row.status_class }}">{{ row.status_label }}</span>
+                                </div>
+                                <div class="progress assignment-progress mt-2">
+                                    <div class="progress-bar" style="width: {{ row.completion_rate }}%"></div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <div class="text-center py-5 text-muted">
+                                <i class="fa-solid fa-clipboard fs-1 opacity-25 mb-3"></i>
+                                <p class="mb-0">Lớp chưa có bài tập nào.</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="col-lg-5">
+                            <h2 class="h5 fw-bold mb-3">Cần xử lý</h2>
+                            {% if pending_requests %}
+                                {% for item in pending_requests[:5] %}
+                                <div class="d-flex justify-content-between align-items-center gap-3 border-bottom py-3">
+                                    <div>
+                                        <div class="fw-bold">{{ item.student.display_name }}</div>
+                                        <div class="small text-muted">{{ item.student.student_code or 'Chưa có mã sinh viên' }}</div>
+                                    </div>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn btn-sm btn-success" onclick="reviewJoinRequest({{ item.id }}, 'approve')" title="Duyệt"><i class="fa-solid fa-check"></i></button>
+                                        <button class="btn btn-sm btn-outline-danger" onclick="reviewJoinRequest({{ item.id }}, 'reject')" title="Từ chối"><i class="fa-solid fa-xmark"></i></button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <div class="bg-body-tertiary p-4 rounded-3 text-center text-muted">
+                                <i class="fa-solid fa-circle-check fs-2 text-success mb-2"></i>
+                                <div>Không có yêu cầu đang chờ.</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="classAssignments">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h2 class="h5 fw-bold mb-1">Danh sách bài đã giao</h2>
+                            <div class="small text-muted">{{ summary.assignment_count }} bài · {{ summary.total_submissions }} lượt nộp được ghi nhận</div>
+                        </div>
+                        <a href="{{ url_for('teacher_dashboard') }}#tab-exam-bank" class="btn btn-primary fw-bold">
+                            <i class="fa-solid fa-plus me-2"></i>Giao bài
+                        </a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead>
+                                <tr>
+                                    <th>Bài tập</th>
+                                    <th>Trạng thái</th>
+                                    <th>Đã nộp</th>
+                                    <th>Điểm TB</th>
+                                    <th>Hạn nộp</th>
+                                    <th class="text-end">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in assignment_rows %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">{{ row.assignment.title }}</div>
+                                        <div class="small text-muted">{{ row.assignment.total_questions }} câu</div>
+                                    </td>
+                                    <td><span class="badge text-bg-{{ row.status_class }}">{{ row.status_label }}</span></td>
+                                    <td>
+                                        <div class="fw-bold">{{ row.submitted_count }}/{{ summary.student_count }}</div>
+                                        <div class="progress assignment-progress mt-1" style="width: 100px;">
+                                            <div class="progress-bar" style="width: {{ row.completion_rate }}%"></div>
+                                        </div>
+                                    </td>
+                                    <td>{{ row.average_score if row.average_score is not none else '-' }}</td>
+                                    <td>{{ row.assignment.due_at.strftime('%d/%m/%Y %H:%M') if row.assignment.due_at else 'Không giới hạn' }}</td>
+                                    <td class="text-end text-nowrap">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="openAssignmentResults({{ row.assignment.id }})" title="Xem kết quả">
+                                            <i class="fa-solid fa-chart-column"></i>
+                                        </button>
+                                        <a class="btn btn-sm btn-outline-success" href="{{ url_for('api_teacher_assignment_results_csv', assignment_id=row.assignment.id) }}" title="Xuất CSV">
+                                            <i class="fa-solid fa-file-csv"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="6" class="text-center text-muted py-5">Chưa có bài tập nào được giao cho lớp.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="classMembers">
+                    {% if pending_requests %}
+                    <h2 class="h5 fw-bold mb-3">Yêu cầu chờ duyệt</h2>
+                    <div class="table-responsive mb-5">
+                        <table class="table align-middle">
+                            <thead><tr><th>Sinh viên</th><th>Trường / ngành</th><th>Thời gian gửi</th><th class="text-end">Xử lý</th></tr></thead>
+                            <tbody>
+                                {% for item in pending_requests %}
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold">{{ item.student.display_name }}</div>
+                                        <div class="small text-muted">
+                                            {{ item.student.student_code or 'Chưa có mã SV' }}
+                                            {% if item.student.student_code_verified %}
+                                            <span class="badge text-bg-success ms-1">Đã xác minh</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>{{ item.student.school_name or '-' }}{% if item.student.major %}<div class="small text-muted">{{ item.student.major }}</div>{% endif %}</td>
+                                    <td>{{ item.requested_at.strftime('%d/%m/%Y %H:%M') if item.requested_at else '-' }}</td>
+                                    <td class="text-end text-nowrap">
+                                        <button class="btn btn-sm btn-success fw-bold" onclick="reviewJoinRequest({{ item.id }}, 'approve')">Duyệt</button>
+                                        <button class="btn btn-sm btn-outline-danger fw-bold" onclick="reviewJoinRequest({{ item.id }}, 'reject')">Từ chối</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h5 fw-bold mb-0">Thành viên lớp</h2>
+                        <span class="small text-muted">{{ summary.student_count }} sinh viên</span>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead><tr><th>Sinh viên</th><th>Mã sinh viên</th><th>Trường</th><th>Ngành</th><th class="text-end">Thao tác</th></tr></thead>
+                            <tbody>
+                                {% for student in students %}
+                                <tr>
+                                    <td class="fw-bold">{{ student.display_name }}</td>
+                                    <td>
+                                        <div>{{ student.student_code or '-' }}</div>
+                                        {% if student.student_code_verified %}
+                                        <span class="badge text-bg-success">
+                                            <i class="fa-solid fa-circle-check me-1"></i>Đã xác minh
+                                        </span>
+                                        {% else %}
+                                        <span class="badge text-bg-secondary">Chưa xác minh</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ student.school_name or '-' }}</td>
+                                    <td>{{ student.major or '-' }}</td>
+                                    <td class="text-end text-nowrap">
+                                        {% if student.student_code_verified %}
+                                        <button class="btn btn-sm btn-outline-warning"
+                                            onclick='verifyStudentCode({{ student.id }}, false, {{ student.display_name|tojson }})'
+                                            title="Thu hồi xác minh MSSV">
+                                            <i class="fa-solid fa-shield-halved"></i>
+                                        </button>
+                                        {% else %}
+                                        <button class="btn btn-sm btn-outline-success"
+                                            onclick='verifyStudentCode({{ student.id }}, true, {{ student.display_name|tojson }})'
+                                            title="Xác minh MSSV">
+                                            <i class="fa-solid fa-user-check"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button class="btn btn-sm btn-outline-danger" onclick='removeStudent({{ student.id }}, {{ student.display_name|tojson }})' title="Xóa khỏi lớp">
+                                            <i class="fa-solid fa-user-minus"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-center text-muted py-5">Lớp chưa có sinh viên.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="classGradebook">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h2 class="h5 fw-bold mb-1">Bảng điểm tổng hợp</h2>
+                            <div class="small text-muted">Điểm trung bình chỉ tính trên các bài sinh viên đã nộp.</div>
+                        </div>
+                    </div>
+                    <div class="table-responsive border rounded-3">
+                        <table class="table gradebook-table mb-0 text-center">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-start">Sinh viên</th>
+                                    {% for row in assignment_rows %}
+                                    <th title="{{ row.assignment.title }}">{{ row.assignment.title|truncate(24) }}</th>
+                                    {% endfor %}
+                                    <th>Trung bình</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in gradebook_rows %}
+                                <tr>
+                                    <td class="text-start">
+                                        <div class="fw-bold">{{ row.student.display_name }}</div>
+                                        <div class="small text-muted">{{ row.student.student_code or 'Chưa có mã SV' }}</div>
+                                    </td>
+                                    {% for cell in row.cells %}
+                                    <td title="{{ cell.submitted_at }}">
+                                        {% if cell.submitted %}
+                                        <span class="fw-bold {{ 'text-success' if cell.score >= 5 else 'text-danger' }}">{{ cell.score }}</span>
+                                        {% else %}
+                                        <span class="text-muted">Chưa nộp</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endfor %}
+                                    <td class="fw-bold">{{ row.average_score if row.average_score is not none else '-' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="{{ assignment_rows|length + 2 }}" class="text-center text-muted py-5">Chưa có sinh viên để hiển thị bảng điểm.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="classSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <h2 class="modal-title h5 fw-bold"><i class="fa-solid fa-gear me-2 text-primary"></i>Cài đặt lớp học</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="classSettingsAlert" class="alert d-none"></div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Tên lớp</label>
+                    <input id="classNameInput" class="form-control" value="{{ classroom.name }}">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Mô tả</label>
+                    <textarea id="classDescriptionInput" class="form-control" rows="3">{{ classroom.description or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Mã lớp</label>
+                    <div class="input-group">
+                        <input id="classCodeInput" class="form-control font-monospace text-uppercase" value="{{ classroom.code }}" maxlength="20">
+                        <button class="btn btn-outline-secondary" type="button" onclick="generateClassCode()" title="Tạo mã mới"><i class="fa-solid fa-shuffle"></i></button>
+                    </div>
+                </div>
+                <div>
+                    <label class="form-label fw-bold">Cách tham gia</label>
+                    <select id="classJoinPolicyInput" class="form-select">
+                        <option value="open" {{ 'selected' if classroom.join_policy == 'open' else '' }}>Vào ngay khi có mã</option>
+                        <option value="approval" {{ 'selected' if classroom.join_policy == 'approval' else '' }}>Phải được giáo viên duyệt</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-light" data-bs-dismiss="modal">Hủy</button>
+                <button class="btn btn-primary fw-bold" id="saveClassSettingsButton" onclick="saveClassSettings()">Lưu thay đổi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="assignmentResultsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title h5 fw-bold">Kết quả bài tập</h2>
+                    <div class="small text-muted" id="assignmentResultsTitle">Đang tải...</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="assignmentResultsBody">
+                <div class="text-center py-5"><i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const classId = {{ classroom.id }};
+
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = value ?? '';
+        return div.innerHTML;
+    }
+
+    function copyClassCode() {
+        navigator.clipboard.writeText(document.getElementById('classCodeLabel').textContent.trim());
+    }
+
+    function generateClassCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let suffix = '';
+        for (let index = 0; index < 4; index += 1) {
+            suffix += chars[Math.floor(Math.random() * chars.length)];
+        }
+        document.getElementById('classCodeInput').value = `HUST-${suffix}`;
+    }
+
+    function saveClassSettings() {
+        const button = document.getElementById('saveClassSettingsButton');
+        const alertBox = document.getElementById('classSettingsAlert');
+        button.disabled = true;
+        fetch(`/api/teacher/class/${classId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: document.getElementById('classNameInput').value,
+                description: document.getElementById('classDescriptionInput').value,
+                code: document.getElementById('classCodeInput').value,
+                join_policy: document.getElementById('classJoinPolicyInput').value
+            })
+        })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alertBox.className = 'alert alert-danger';
+                    alertBox.textContent = data.message || 'Không cập nhật được lớp học.';
+                    button.disabled = false;
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => {
+                alertBox.className = 'alert alert-danger';
+                alertBox.textContent = 'Không kết nối được máy chủ.';
+                button.disabled = false;
+            });
+    }
+
+    function reviewJoinRequest(requestId, action) {
+        fetch(`/api/teacher/class/${classId}/join-requests/${requestId}/${action}`, { method: 'POST' })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    alert(data.message || 'Không xử lý được yêu cầu.');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => alert('Không kết nối được máy chủ.'));
+    }
+
+    function removeStudent(studentId, username) {
+        if (!confirm(`Xóa ${username} khỏi lớp? Điểm đã nộp vẫn được lưu trong hệ thống.`)) return;
+        fetch(`/api/teacher/class/${classId}/students/${studentId}`, { method: 'DELETE' })
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) {
+                    alert(data.message || 'Không xóa được sinh viên.');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => alert('Không kết nối được máy chủ.'));
+    }
+
+    function verifyStudentCode(studentId, verified, displayName) {
+        const actionLabel = verified ? 'xác minh' : 'thu hồi xác minh';
+        if (!confirm(`Bạn muốn ${actionLabel} mã số sinh viên của ${displayName}?`)) return;
+        fetch(`/api/teacher/class/${classId}/students/${studentId}/verify-code`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ verified })
+        })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không cập nhật được trạng thái xác minh.');
+                    return;
+                }
+                location.reload();
+            })
+            .catch(() => alert('Không kết nối được máy chủ.'));
+    }
+
+    function openAssignmentResults(assignmentId) {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('assignmentResultsModal'));
+        const body = document.getElementById('assignmentResultsBody');
+        document.getElementById('assignmentResultsTitle').textContent = 'Đang tải...';
+        body.innerHTML = '<div class="text-center py-5"><i class="fa-solid fa-spinner fa-spin fs-2 text-primary"></i></div>';
+        modal.show();
+
+        fetch(`/api/teacher/assignments/${assignmentId}/results`)
+            .then((response) => response.json())
+            .then((data) => {
+                if (!data.success) throw new Error(data.message || 'Không tải được kết quả.');
+                const summary = data.summary;
+                document.getElementById('assignmentResultsTitle').textContent = data.assignment.title;
+                const rows = (data.results || []).map((row) => `
+                    <tr>
+                        <td class="fw-bold">${escapeHtml(row.display_name)}</td>
+                        <td>${row.submitted ? '<span class="badge text-bg-success">Đã nộp</span>' : '<span class="badge text-bg-secondary">Chưa nộp</span>'}</td>
+                        <td>${row.submitted ? `<strong>${row.score}/10</strong>` : '-'}</td>
+                        <td>${row.submitted ? escapeHtml(row.submitted_at) : '-'}</td>
+                    </tr>
+                `).join('');
+                body.innerHTML = `
+                    <div class="row g-3 mb-4">
+                        <div class="col-6 col-lg-3"><div class="bg-body-tertiary p-3 rounded-3"><div class="small text-muted">Đã nộp</div><div class="fs-4 fw-bold">${summary.submitted_count}/${summary.total_students}</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="bg-body-tertiary p-3 rounded-3"><div class="small text-muted">Tỷ lệ</div><div class="fs-4 fw-bold">${summary.submitted_rate}%</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="bg-body-tertiary p-3 rounded-3"><div class="small text-muted">Điểm TB</div><div class="fs-4 fw-bold">${summary.average_score}</div></div></div>
+                        <div class="col-6 col-lg-3"><div class="bg-body-tertiary p-3 rounded-3"><div class="small text-muted">Điểm cao nhất</div><div class="fs-4 fw-bold">${summary.highest_score ?? '-'}</div></div></div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table align-middle">
+                            <thead><tr><th>Sinh viên</th><th>Trạng thái</th><th>Điểm</th><th>Thời gian nộp</th></tr></thead>
+                            <tbody>${rows || '<tr><td colspan="4" class="text-center text-muted py-4">Chưa có dữ liệu.</td></tr>'}</tbody>
+                        </table>
+                    </div>`;
+            })
+            .catch((error) => {
+                body.innerHTML = `<div class="alert alert-danger mb-0">${escapeHtml(error.message)}</div>`;
+            });
+    }
+</script>
+
+{% endblock %}

@@ -30,7 +30,7 @@
                 style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
                 <i class="fa-solid fa-chalkboard-user display-4 mb-2"></i>
                 <h5 class="mb-0 fw-bold">Khu vực Giảng viên</h5>
-                <span class="badge bg-light text-primary mt-2 px-3 py-1 rounded-pill">{{ current_user.username }}</span>
+                <span class="badge bg-light text-primary mt-2 px-3 py-1 rounded-pill">{{ current_user.display_name }}</span>
             </div>
 
             <div class="list-group list-group-flush nav nav-pills p-2" role="tablist">
@@ -121,8 +121,10 @@
                                 </div>
 
                                 <div class="d-flex gap-2 mt-auto">
-                                    <button class="btn btn-outline-primary rounded-pill w-50 fw-bold hover-lift"
-                                        onclick="viewClassStudents({{ c.id }})">Xem Danh sách</button>
+                                    <a class="btn btn-outline-primary rounded-pill w-50 fw-bold hover-lift"
+                                        href="{{ url_for('teacher_class_detail', class_id=c.id) }}">
+                                        <i class="fa-solid fa-chart-line me-1"></i>Quản lý lớp
+                                    </a>
                                     <button class="btn rounded-pill w-50 fw-bold text-white hover-lift"
                                         style="background-color: #007bff;" onclick='openAssignExamModal({{ c.id }}, {{ c.name|tojson }})'>Giao Bài Tập</button>
                                 </div>
@@ -1040,11 +1042,14 @@
                             .filter(Boolean)
                             .map(escapeHtml)
                             .join(' • ');
+                        const verificationBadge = request.student_code_verified
+                            ? '<span class="badge text-bg-success ms-2">Đã xác minh</span>'
+                            : '';
                         return `
                             <div class="list-group-item border-0 border-bottom p-3 bg-body">
                                 <div class="d-flex justify-content-between align-items-center gap-3">
                                     <div>
-                                        <div class="fw-bold">${escapeHtml(request.username)}</div>
+                                        <div class="fw-bold">${escapeHtml(request.display_name)}${verificationBadge}</div>
                                         <div class="small text-muted">${profileLine}</div>
                                         <div class="small text-muted">Gửi lúc ${escapeHtml(request.requested_at)}</div>
                                     </div>
@@ -1065,12 +1070,15 @@
                             .filter(Boolean)
                             .map(escapeHtml)
                             .join(' • ');
+                        const verificationBadge = student.student_code_verified
+                            ? '<span class="badge text-bg-success ms-2">Đã xác minh</span>'
+                            : '<span class="badge text-bg-secondary ms-2">Chưa xác minh</span>';
                         listContainer.insertAdjacentHTML('beforeend', `
                             <div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center feature-card-hover">
                                 <span class="fw-bold text-muted me-3">${index + 1}.</span>
-                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(student.username)}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm" alt="">
+                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(student.display_name)}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm" alt="">
                                 <div>
-                                    <h6 class="fw-bold mb-0 text-body">${escapeHtml(student.username)}</h6>
+                                    <h6 class="fw-bold mb-0 text-body">${escapeHtml(student.display_name)}${verificationBadge}</h6>
                                     <small class="text-muted">${profileLine || 'Chưa cập nhật thông tin sinh viên'}</small>
                                 </div>
                             </div>`);
@@ -2024,7 +2032,7 @@
                         <div class="list-group-item border-0 border-bottom p-3 bg-body">
                             <div class="d-flex align-items-center justify-content-between gap-3">
                                 <div>
-                                    <div class="fw-bold text-body">${index + 1}. ${escapeHtml(row.username)}</div>
+                                    <div class="fw-bold text-body">${index + 1}. ${escapeHtml(row.display_name)}</div>
                                     <div class="small text-muted">${row.submitted_at ? `Nộp lúc: ${escapeHtml(row.submitted_at)}` : 'Chưa có thời gian nộp'}</div>
                                     <div class="small text-muted">${(row.attempt_history || []).length} lượt đã hoàn thành</div>
                                 </div>
@@ -2048,7 +2056,7 @@
         const row = (window.currentAssignmentResultRows || [])[Number(rowIndex)];
         if (!row || !row.submitted) return;
 
-        document.getElementById('submissionDetailMeta').textContent = `${row.username} • ${row.score}/10 • ${row.correct_count}/${row.total_questions} câu đúng`;
+        document.getElementById('submissionDetailMeta').textContent = `${row.display_name} • ${row.score}/10 • ${row.correct_count}/${row.total_questions} câu đúng`;
         const container = document.getElementById('submissionDetailQuestions');
         const details = row.question_details || [];
         const history = row.attempt_history || [];
@@ -3100,5 +3108,15 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             singleArea.classList.remove('d-none'); mixedArea.classList.add('d-none');
         }
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const targetHash = window.location.hash;
+        if (!targetHash) return;
+        const tabTrigger = document.querySelector(`[data-bs-toggle="pill"][href="${targetHash}"]`);
+        if (!tabTrigger) return;
+        bootstrap.Tab.getOrCreateInstance(tabTrigger).show();
+        resetWorkspaceLayout();
+        if (targetHash === '#tab-exam-bank') loadExamBankPage();
+    });
 </script>
 {% endblock %}

@@ -24,15 +24,23 @@ user_badges = db.Table('user_badges',
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(150), unique=True, nullable=False)
+    full_name = db.Column(db.String(150), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False)
     student_code = db.Column(db.String(50), unique=True)
+    student_code_verified = db.Column(db.Boolean, default=False, nullable=False)
+    student_code_verified_at = db.Column(db.DateTime)
+    student_code_verified_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     school_name = db.Column(db.String(200))
     major = db.Column(db.String(150))
     
     # Liên kết: Một user có thể có nhiều badge
     badges = db.relationship('Badge', secondary=user_badges, lazy='subquery',
                              backref=db.backref('users', lazy=True))
+
+    @property
+    def display_name(self):
+        return (self.full_name or '').strip() or self.username
 
 # Bảng trung gian lưu danh sách Sinh viên tham gia Lớp học
 student_classes = db.Table('student_classes',
