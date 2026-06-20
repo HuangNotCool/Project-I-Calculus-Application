@@ -194,29 +194,71 @@
                                             required>
                                     </div>
                                     <div class="row g-4 bg-body-tertiary p-4 rounded-4 border-0">
-                                        <div class="col-md-12">
-                                            <label class="form-label fw-bold">1. Mức độ phức tạp:</label>
+                                        <div class="col-md-8">
+                                            <label class="form-label fw-bold">1. Mức độ câu hỏi:</label>
                                             <select class="form-select border-0 shadow-sm rounded-3 py-2"
                                                 name="difficulty" id="randomDifficulty"
                                                 onchange="toggleRandomQuantityInputs()">
-                                                <option value="easy">Chỉ sinh mức Cơ bản (Đa thức, giới hạn hữu hạn)
-                                                </option>
-                                                <option value="medium" selected>Chỉ sinh mức Khá (Dạng 0/0, vô cực,
-                                                    lượng giác cơ bản)</option>
-                                                <option value="hard">Chỉ sinh mức Khó (Lượng giác phức tạp, L'Hopital)
-                                                </option>
-                                                <option value="mixed" class="fw-bold text-primary">TỔNG HỢP (Tùy chỉnh
-                                                    số lượng 3 mức độ)</option>
+                                                <option value="easy">Chỉ sinh mức Cơ bản</option>
+                                                <option value="medium" selected>Chỉ sinh mức Khá</option>
+                                                <option value="hard">Chỉ sinh mức Khó</option>
+                                                <option value="mixed" class="fw-bold text-primary">Tổng hợp theo cơ cấu</option>
                                             </select>
                                         </div>
-                                        <div class="col-md-12" id="singleQuantityArea">
-                                            <label class="form-label fw-bold">2. Số lượng câu hỏi:</label>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-bold">Seed tái tạo đề:</label>
                                             <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
-                                                name="quantity" value="10" min="1" max="50">
+                                                name="seed" value="1" step="1" required>
+                                            <div class="form-text">Cùng cấu hình và seed sẽ sinh lại đúng đề này.</div>
+                                        </div>
+                                        <div class="col-12">
+                                            <label class="form-label fw-bold">2. Các dạng bài được phép xuất hiện:</label>
+                                            <div class="row g-2">
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="inverse_trig_domain" checked>
+                                                        <span class="fw-bold">Tập xác định</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="equivalent_infinitesimal" checked>
+                                                        <span class="fw-bold">Vô cùng bé tương đương</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="limit_zero" checked>
+                                                        <span class="fw-bold">Giới hạn tại 0</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="limit_infinity" checked>
+                                                        <span class="fw-bold">Giới hạn tại vô cùng</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="continuity_parameter" checked>
+                                                        <span class="fw-bold">Liên tục theo tham số</span>
+                                                    </label>
+                                                </div>
+                                                <div class="col-md-6 col-xl-4">
+                                                    <label class="form-check border rounded-3 bg-body p-3 h-100">
+                                                        <input class="form-check-input ms-0 me-2" type="checkbox" name="topics" value="discontinuity" checked>
+                                                        <span class="fw-bold">Phân loại gián đoạn</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-12" id="singleQuantityArea">
+                                            <label class="form-label fw-bold">3. Số lượng câu hỏi:</label>
+                                            <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
+                                                name="quantity" value="10" min="1" max="40">
                                         </div>
                                         <div class="col-md-12 d-none" id="mixedQuantityArea">
-                                            <label class="form-label fw-bold">2. Cơ cấu số lượng câu hỏi (Đề sẽ tự sắp
-                                                xếp Cơ bản -> Khó):</label>
+                                            <label class="form-label fw-bold">3. Cơ cấu số lượng câu hỏi:</label>
                                             <div class="row g-3 mt-1">
                                                 <div class="col-md-4">
                                                     <div class="input-group shadow-sm rounded-3 overflow-hidden">
@@ -251,17 +293,18 @@
                                         <div class="col-12 text-end mt-4 border-top pt-4 border-secondary-subtle">
                                             <div id="successAlert"
                                                 class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3">
-                                                <i class="fa-solid fa-circle-check me-2"></i><strong>Thành
-                                                    công!</strong> Đã sinh xong đề thi. Vui lòng chọn định dạng xuất
-                                                file bên dưới.
+                                                <i class="fa-solid fa-circle-check me-2"></i><strong>Đã sinh đề.</strong>
+                                                Kiểm tra preview và lời giải trước khi xuất file.
                                             </div>
                                             <button type="submit" id="btnGenerate"
                                                 class="btn px-5 py-2 rounded-pill fw-bold shadow hover-lift text-white"
                                                 style="background-color: #ff6600;">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Tạo Đề Ngay
+                                                <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Sinh & Xem Trước
                                             </button>
                                         </div>
                                     </div>
+                                    <div id="randomExamSummary" class="alert alert-info border-0 shadow-sm mt-4 d-none"></div>
+                                    <div id="randomExamPreview" class="mt-3"></div>
                                 </form>
                             </div>
 
@@ -3072,30 +3115,96 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
     // Sinh đề Ngẫu nhiên 
     function generateExamAjax() {
         const form = document.getElementById('randomExamForm');
+        const selectedTopics = form.querySelectorAll('input[name="topics"]:checked');
+        if (!selectedTopics.length) {
+            alert('Cần chọn ít nhất một dạng bài.');
+            return;
+        }
         const formData = new FormData(form);
         const btn = document.getElementById('btnGenerate');
         const alertBox = document.getElementById('successAlert');
         const btnTex = document.getElementById('btnExportTex');
         const btnPdf = document.getElementById('btnExportPdf');
+        const preview = document.getElementById('randomExamPreview');
+        const summary = document.getElementById('randomExamSummary');
 
         const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang xử lý Toán học...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang sinh và kiểm tra câu...';
         btn.disabled = true;
         alertBox.classList.add('d-none'); btnTex.classList.add('disabled'); btnPdf.classList.add('disabled');
+        preview.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tạo câu hỏi...</div></div>';
+        summary.classList.add('d-none');
 
         fetch('/api/generate-exam', { method: 'POST', body: formData })
-            .then(response => response.json())
-            .then(data => {
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
                 btn.innerHTML = originalText;
                 btn.disabled = false;
-                if (data.success) {
+                if (ok && data.success) {
+                    window.randomExamData = data;
+                    renderRandomExamPreview(data);
                     alertBox.classList.remove('d-none');
                     btnTex.classList.remove('disabled');
                     btnPdf.classList.remove('disabled');
-                } else { alert("Có lỗi xảy ra: " + data.message); }
+                } else {
+                    preview.innerHTML = '';
+                    alert("Có lỗi xảy ra: " + (data.message || 'Không sinh được đề.'));
+                }
             }).catch(error => {
-                btn.innerHTML = originalText; btn.disabled = false; alert("Lỗi kết nối máy chủ!");
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                preview.innerHTML = '';
+                alert("Lỗi kết nối máy chủ!");
             });
+    }
+
+    function renderRandomExamPreview(data) {
+        const preview = document.getElementById('randomExamPreview');
+        const summary = document.getElementById('randomExamSummary');
+        const topicBadges = (data.topic_counts || []).map((item) => {
+            return `<span class="badge bg-primary-subtle text-primary border rounded-pill">${escapeHtml(item.label)}: ${item.count}</span>`;
+        }).join('');
+        summary.className = 'alert alert-info border-0 shadow-sm mt-4';
+        summary.innerHTML = `
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <strong><i class="fa-solid fa-circle-check me-2"></i>${data.total_questions} câu, seed ${escapeHtml(data.seed)}</strong>
+                ${topicBadges}
+            </div>`;
+
+        preview.innerHTML = (data.questions || []).map((question) => {
+            const options = (question.choices || []).map((choice) => {
+                const content = choice.is_math ? `$${choice.tex}$` : escapeHtml(choice.tex);
+                const style = choice.is_correct
+                    ? 'border-success bg-success-subtle text-success-emphasis'
+                    : 'border-secondary-subtle bg-body';
+                return `
+                    <div class="col-md-6">
+                        <div class="border rounded-3 p-3 h-100 ${style}">
+                            <strong class="me-2">${choice.letter}.</strong>${content}
+                        </div>
+                    </div>`;
+            }).join('');
+            return `
+                <div class="border rounded-4 bg-body shadow-sm p-4 mb-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <span class="badge bg-primary-subtle text-primary border rounded-pill me-1">${escapeHtml(question.topic_label)}</span>
+                            <span class="badge bg-warning-subtle text-warning-emphasis border rounded-pill">${escapeHtml(question.difficulty_label)}</span>
+                        </div>
+                        <span class="small text-muted">Câu ${question.number} · Đáp án ${question.correct_letter}</span>
+                    </div>
+                    <div class="fw-bold mb-3">Câu ${question.number}. ${question.prompt_tex}</div>
+                    <div class="row g-2 mb-3">${options}</div>
+                    <div class="border-top pt-3">
+                        <div class="fw-bold text-success mb-1"><i class="fa-solid fa-lightbulb me-2"></i>Lời giải</div>
+                        <div>${question.solution_tex}</div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        if (window.MathJax) {
+            MathJax.typesetPromise([summary, preview]);
+        }
     }
 
     function toggleRandomQuantityInputs() {

@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+import shutil
+import tempfile
 
 import pytest
 from werkzeug.security import generate_password_hash
@@ -13,11 +16,16 @@ import app as app_module
 from models import Assignment, Class, User, db
 
 
+TEST_CURRENT_EXAM_DIR = Path(tempfile.gettempdir()) / 'giaitich_app_pytest_current_exams'
+
+
 @pytest.fixture()
 def app():
+    shutil.rmtree(TEST_CURRENT_EXAM_DIR, ignore_errors=True)
     app_module.app.config.update(
         TESTING=True,
-        SQLALCHEMY_DATABASE_URI='sqlite:///pytest.db'
+        SQLALCHEMY_DATABASE_URI='sqlite:///pytest.db',
+        CURRENT_EXAM_DIR=str(TEST_CURRENT_EXAM_DIR)
     )
     app_module._rate_limit_events.clear()
     with app_module.app.app_context():
@@ -27,6 +35,7 @@ def app():
     with app_module.app.app_context():
         db.session.remove()
         db.drop_all()
+    shutil.rmtree(TEST_CURRENT_EXAM_DIR, ignore_errors=True)
 
 
 @pytest.fixture()

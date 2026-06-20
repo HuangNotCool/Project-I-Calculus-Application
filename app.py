@@ -1,5 +1,11 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file, abort, g
 from models import db, User, Badge, Class, ClassJoinRequest, ExamTemplate, ExamBank, Assignment, AssignmentAttempt, Submission, Notification
+from random_exam import (
+    GENERATORS as RANDOM_EXAM_GENERATORS,
+    TOPIC_LABELS as RANDOM_EXAM_TOPIC_LABELS,
+    generate_random_questions,
+    render_random_exam_tex,
+)
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate, upgrade, stamp
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -241,6 +247,26 @@ def get_submission_lock(attempt_id):
             lock = threading.Lock()
             _submission_locks[attempt_id] = lock
         return lock
+
+
+def store_current_exam_tex(tex_content):
+    output_dir = Path(app.config.get('CURRENT_EXAM_DIR') or (INSTANCE_DIR / 'current_exams'))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f'user_{current_user.id}.tex'
+    temporary_path = output_dir / f'user_{current_user.id}.tmp'
+    temporary_path.write_text(str(tex_content or ''), encoding='utf-8')
+    temporary_path.replace(output_path)
+    session.pop('current_exam_tex', None)
+    session['current_exam_ready'] = True
+    session.modified = True
+
+
+def load_current_exam_tex():
+    output_dir = Path(app.config.get('CURRENT_EXAM_DIR') or (INSTANCE_DIR / 'current_exams'))
+    output_path = output_dir / f'user_{current_user.id}.tex'
+    if output_path.exists():
+        return output_path.read_text(encoding='utf-8')
+    return session.get('current_exam_tex')
 
 
 @login_manager.user_loader
@@ -2497,110 +2523,72 @@ def api_delete_class(class_id):
 # --- CÁC ROUTE XỬ LÝ SINH ĐỀ (GIỮ NGUYÊN) ---
 # =====================================================================
 @app.route('/api/generate-exam', methods=['POST'])
-@login_required
+@role_required('teacher')
 def api_generate_exam():
-    if current_user.role != 'teacher':
-        return jsonify({'success': False, 'message': 'Không có quyền truy cập'})
+    title = str(request.form.get('exam_title') or 'Đề thi Giải tích I').strip()
+    difficulty = str(request.form.get('difficulty') or 'medium').strip().lower()
+    topics = request.form.getlist('topics')
+    if not topics:
+        topics = list(RANDOM_EXAM_GENERATORS)
 
-    title = request.form.get('exam_title', 'Đề thi Giải tích I')
-    difficulty = request.form.get('difficulty')
-    questions = []
-    x = sp.Symbol('x')
+    try:
+        seed = int(request.form.get('seed') or 1)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Seed phải là một số nguyên.'}), 400
 
-    def tao_cau_hoi(muc_do):
-        def f_exp(t): return sp.exp(t) - 1
-        def f_sin(t): return sp.sin(t)
-        def f_tan(t): return sp.tan(t)
-        def f_asin(t): return sp.asin(t)
-        def f_atan(t): return sp.atan(t)
-        def f_ln(t): return sp.ln(1 + t)
-        
-        tap_ham = [f_exp, f_sin, f_tan, f_asin, f_atan, f_ln]
+    try:
+        if difficulty == 'mixed':
+            difficulty_counts = {
+                'easy': int(request.form.get('qty_easy') or 0),
+                'medium': int(request.form.get('qty_medium') or 0),
+                'hard': int(request.form.get('qty_hard') or 0),
+            }
+        elif difficulty in {'easy', 'medium', 'hard'}:
+            quantity = int(request.form.get('quantity') or 0)
+            difficulty_counts = {'easy': 0, 'medium': 0, 'hard': 0}
+            difficulty_counts[difficulty] = quantity
+        else:
+            return jsonify({'success': False, 'message': 'Mức độ sinh đề không hợp lệ.'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'message': 'Số lượng câu hỏi phải là số nguyên.'}), 400
 
-        if muc_do == 'easy':
-            if random.choice([True, False]):
-                a, b, c = random.randint(1, 5), random.randint(-5, 5), random.randint(1, 10)
-                expr = a*x**2 + b*x + c
-                val = random.randint(0, 3)
-            else:
-                a, b = random.randint(1, 5), random.randint(1, 5)
-                expr = (a*x**2 + 1) / (b*x**2 + 2)
-                val = sp.oo 
-                
-        elif muc_do == 'medium':   
-            if random.choice([True, False]):
-                a = random.randint(2, 9)
-                f_chosen = random.choice(tap_ham)
-                expr = f_chosen(a*x) / x
-                val = 0
-            else:
-                a, c = random.randint(1, 5), random.randint(1, 3)
-                expr = (a*x**2 - a*c**2) / (x - c)
-                val = c
-        else: 
-            a, b = random.randint(2, 6), random.randint(2, 6)
-            f_1 = random.choice(tap_ham)
-            f_2 = random.choice(tap_ham)
-            
-            if random.choice([True, False]):
-                expr = f_1(a*x) / f_2(b*x)
-            else:
-                expr = (f_1(a*x) * f_2(b*x)) / (x**2)
-            val = 0
+    if any(value < 0 for value in difficulty_counts.values()):
+        return jsonify({'success': False, 'message': 'Số lượng câu hỏi không được âm.'}), 400
+    total_questions = sum(difficulty_counts.values())
+    if total_questions < 1 or total_questions > 40:
+        return jsonify({'success': False, 'message': 'Mỗi đề cần từ 1 đến 40 câu hỏi.'}), 400
 
-        ans = sp.limit(expr, x, val)
-        val_tex = sp.latex(val) 
-        de_bai_latex = rf"\displaystyle \lim_{{x \to {val_tex}}} {sp.latex(expr)}"
-        
-        return de_bai_latex, ans
+    try:
+        questions = generate_random_questions(seed, difficulty_counts, topics)
+        tex_content = render_random_exam_tex(title, seed, questions)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
 
-    if difficulty == 'mixed':
-        qty_easy = int(request.form.get('qty_easy', 0))
-        qty_medium = int(request.form.get('qty_medium', 0))
-        qty_hard = int(request.form.get('qty_hard', 0))
-        for _ in range(qty_easy): questions.append(tao_cau_hoi('easy'))
-        for _ in range(qty_medium): questions.append(tao_cau_hoi('medium'))
-        for _ in range(qty_hard): questions.append(tao_cau_hoi('hard'))
-    else:
-        qty = int(request.form.get('quantity', 0))
-        for _ in range(qty): questions.append(tao_cau_hoi(difficulty))
+    store_current_exam_tex(tex_content)
+    topic_counts = {}
+    for question in questions:
+        topic_counts[question.topic] = topic_counts.get(question.topic, 0) + 1
 
-    tex_content = f"\\documentclass[12pt, a4paper]{{article}}\n\\usepackage[utf8]{{vietnam}}\n\\usepackage{{amsmath}}\n\\usepackage{{setspace}}\n\\onehalfspacing\n\n\\begin{{document}}\n\n\\begin{{center}}\n\\Large\\textbf{{{title}}}\n\\end{{center}}\n\n\\vspace{{0.5cm}}\n\\begin{{enumerate}}\n"
-    bang_dap_an = []
-
-    for idx, (q, ans) in enumerate(questions):
-        tex_content += f"    \\item Tính giới hạn sau: $ {q} $\n\n"
-        correct_tex = sp.latex(ans)
-        pool = [r"0", r"1", r"-1", r"\infty", r"-\infty", r"\text{Không tồn tại}"]
-        
-        if ans.is_number and not ans.has(sp.oo):
-            try:
-                pool.extend([sp.latex(ans + 1), sp.latex(ans - 1), sp.latex(-ans)])
-            except: pass
-                
-        pool = list(set([p for p in pool if p != correct_tex]))
-        distractors = random.sample(pool, min(3, len(pool)))
-        options = [correct_tex] + distractors
-        random.shuffle(options)
-        
-        dap_an_dung = ['A', 'B', 'C', 'D'][options.index(correct_tex)]
-        bang_dap_an.append(f"\\textbf{{{idx + 1}.{dap_an_dung}}}")
-
-        tex_content += f"    A. $ {options[0]} $ \\qquad B. $ {options[1]} $ \\qquad C. $ {options[2]} $ \\qquad D. $ {options[3]} $\n\n    \\vspace{{0.3cm}}\n\n"
-
-    tex_content += "\\end{enumerate}\n\n"
-    tex_content += "\\vspace{1cm}\n\\hrule\n\\vspace{0.5cm}\n"
-    tex_content += "\\noindent\\textbf{\\Large BẢNG ĐÁP ÁN}\\\\\n\\vspace{0.5cm}\n"
-    tex_content += "\\noindent " + " \\quad ".join(bang_dap_an) + "\n\n"
-    tex_content += "\\end{document}"
-
-    session['current_exam_tex'] = tex_content
-    return jsonify({'success': True})
+    return jsonify({
+        'success': True,
+        'seed': seed,
+        'total_questions': len(questions),
+        'difficulty_counts': difficulty_counts,
+        'topic_counts': [{
+            'topic': topic,
+            'label': RANDOM_EXAM_TOPIC_LABELS[topic],
+            'count': count
+        } for topic, count in topic_counts.items()],
+        'questions': [
+            question.to_dict(index)
+            for index, question in enumerate(questions, start=1)
+        ]
+    })
 
 @app.route('/download/tex')
 @login_required
 def download_tex():
-    tex_content = session.get('current_exam_tex')
+    tex_content = load_current_exam_tex()
     if not tex_content:
         flash('Không tìm thấy đề thi. Vui lòng tạo lại.', 'danger')
         return redirect(url_for('teacher_dashboard'))
@@ -2610,7 +2598,7 @@ def download_tex():
 @app.route('/download/pdf')
 @login_required
 def download_pdf():
-    tex_content = session.get('current_exam_tex')
+    tex_content = load_current_exam_tex()
     if not tex_content:
         flash('Không tìm thấy đề thi. Vui lòng tạo lại.', 'danger')
         return redirect(url_for('teacher_dashboard'))
@@ -2793,7 +2781,7 @@ def custom_exam_generate():
     tex_content += "\\noindent\\textbf{\\Large BẢNG ĐÁP ÁN}\\\\\n\\vspace{0.5cm}\n"
     tex_content += "\\noindent " + " \\quad ".join(bang_dap_an) + "\n\n\\end{document}"
 
-    session['current_exam_tex'] = tex_content
+    store_current_exam_tex(tex_content)
     session.pop('custom_exam', None) 
     session.modified = True
     
@@ -4509,8 +4497,7 @@ def custom_exam_generate_bulk():
     db.session.add(bank_item)
     db.session.commit()
 
-    session['current_exam_tex'] = tex_content
-    session.modified = True
+    store_current_exam_tex(tex_content)
     return jsonify({
         'success': True,
         'bank_exam': serialize_exam_bank_item(bank_item),
