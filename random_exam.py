@@ -387,6 +387,49 @@ def validate_generated_question(question):
     return True
 
 
+def generated_question_from_dict(data):
+    choices = tuple(
+        GeneratedChoice(
+            tex=str(item.get('tex') or ''),
+            is_correct=bool(item.get('is_correct')),
+            is_math=bool(item.get('is_math', True)),
+        )
+        for item in (data.get('choices') or [])
+    )
+    question = GeneratedQuestion(
+        topic=str(data.get('topic') or ''),
+        difficulty=str(data.get('difficulty') or ''),
+        prompt_tex=str(data.get('prompt_tex') or ''),
+        choices=choices,
+        solution_tex=str(data.get('solution_tex') or ''),
+        fingerprint=str(data.get('fingerprint') or ''),
+    )
+    validate_generated_question(question)
+    return question
+
+
+def generate_replacement_question(
+    seed,
+    topic,
+    difficulty,
+    correct_position,
+    excluded_fingerprints=None,
+):
+    if topic not in GENERATORS:
+        raise ValueError('Dạng bài cần sinh lại không hợp lệ.')
+    if difficulty not in DIFFICULTY_LABELS:
+        raise ValueError('Mức độ câu cần sinh lại không hợp lệ.')
+
+    rng = random.Random(int(seed))
+    excluded = set(excluded_fingerprints or [])
+    for _ in range(100):
+        candidate = GENERATORS[topic](rng, difficulty, correct_position)
+        validate_generated_question(candidate)
+        if candidate.fingerprint not in excluded:
+            return candidate
+    raise ValueError('Không tìm được câu thay thế khác với các câu đang có.')
+
+
 def generate_random_questions(seed, difficulty_counts, topics=None):
     try:
         seed = int(seed)
@@ -426,6 +469,102 @@ def generate_random_questions(seed, difficulty_counts, topics=None):
     if not questions:
         raise ValueError('Số lượng câu hỏi phải lớn hơn 0.')
     return questions
+
+
+def generate_questions_from_blueprint(seed, blueprint):
+    try:
+        seed = int(seed)
+    except (TypeError, ValueError):
+        seed = 1
+    if not isinstance(blueprint, dict):
+        raise ValueError('Ma trận đề không hợp lệ.')
+
+    rng = random.Random(seed)
+    questions = []
+    fingerprints = set()
+    for topic in TOPIC_LABELS:
+        levels = blueprint.get(topic) or {}
+        if not isinstance(levels, dict):
+            continue
+        for difficulty in ('easy', 'medium', 'hard'):
+            try:
+                count = max(int(levels.get(difficulty, 0) or 0), 0)
+            except (TypeError, ValueError):
+                raise ValueError('Số lượng trong ma trận đề phải là số nguyên.')
+            for _ in range(count):
+                generated = None
+                for _attempt in range(100):
+                    correct_position = (seed + len(questions)) % 4
+                    candidate = GENERATORS[topic](rng, difficulty, correct_position)
+                    validate_generated_question(candidate)
+                    if candidate.fingerprint not in fingerprints:
+                        generated = candidate
+                        break
+                if generated is None:
+                    raise ValueError(
+                        f'Không thể sinh đủ câu khác nhau cho {TOPIC_LABELS[topic]} - '
+                        f'{DIFFICULTY_LABELS[difficulty]}.'
+                    )
+                questions.append(generated)
+                fingerprints.add(generated.fingerprint)
+
+    if not questions:
+        raise ValueError('Ma trận đề phải có ít nhất một câu hỏi.')
+    return questions
+
+
+def generate_random_variants(
+    base_seed,
+    variant_count,
+    difficulty_counts=None,
+    topics=None,
+    blueprint=None,
+    max_overlap_ratio=0.25,
+):
+    try:
+        base_seed = int(base_seed)
+        variant_count = int(variant_count)
+    except (TypeError, ValueError):
+        raise ValueError('Seed và số mã đề phải là số nguyên.')
+    if variant_count < 1 or variant_count > 20:
+        raise ValueError('Số mã đề phải nằm trong khoảng từ 1 đến 20.')
+
+    variants = []
+    previous_fingerprint_sets = []
+    for variant_index in range(variant_count):
+        accepted = None
+        for attempt in range(150):
+            candidate_seed = base_seed + variant_index + attempt * 7919
+            if blueprint:
+                questions = generate_questions_from_blueprint(candidate_seed, blueprint)
+            else:
+                questions = generate_random_questions(
+                    candidate_seed,
+                    difficulty_counts or {},
+                    topics,
+                )
+            fingerprints = {question.fingerprint for question in questions}
+            overlap_ratio = 0.0
+            if previous_fingerprint_sets:
+                overlap_ratio = max(
+                    len(fingerprints & previous) / max(len(fingerprints), 1)
+                    for previous in previous_fingerprint_sets
+                )
+            if overlap_ratio <= max_overlap_ratio:
+                accepted = {
+                    'seed': candidate_seed,
+                    'questions': questions,
+                    'overlap_ratio': round(overlap_ratio, 4),
+                }
+                previous_fingerprint_sets.append(fingerprints)
+                break
+        if accepted is None:
+            raise ValueError(
+                'Không thể tạo đủ mã đề với tỷ lệ câu trùng cho phép. '
+                'Hãy chọn thêm dạng bài hoặc giảm số mã đề.'
+            )
+        variants.append(accepted)
+    return variants
 
 
 def _escape_latex_text(value):

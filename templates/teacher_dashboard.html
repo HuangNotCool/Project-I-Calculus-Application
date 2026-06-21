@@ -194,7 +194,7 @@
                                             required>
                                     </div>
                                     <div class="row g-4 bg-body-tertiary p-4 rounded-4 border-0">
-                                        <div class="col-md-8">
+                                        <div class="col-md-4">
                                             <label class="form-label fw-bold">1. Mức độ câu hỏi:</label>
                                             <select class="form-select border-0 shadow-sm rounded-3 py-2"
                                                 name="difficulty" id="randomDifficulty"
@@ -210,6 +210,12 @@
                                             <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
                                                 name="seed" value="1" step="1" required>
                                             <div class="form-text">Cùng cấu hình và seed sẽ sinh lại đúng đề này.</div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label class="form-label fw-bold">Số mã đề:</label>
+                                            <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
+                                                name="variant_count" value="1" min="1" max="20" required>
+                                            <div class="form-text">Các mã giữ cùng cơ cấu và hạn chế câu trùng.</div>
                                         </div>
                                         <div class="col-12">
                                             <label class="form-label fw-bold">2. Các dạng bài được phép xuất hiện:</label>
@@ -252,6 +258,43 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" role="switch"
+                                                    id="randomUseMatrix" name="use_matrix" value="true"
+                                                    onchange="toggleRandomMatrix()">
+                                                <label class="form-check-label fw-bold" for="randomUseMatrix">
+                                                    Dùng ma trận đề chi tiết
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div class="col-12 d-none" id="randomMatrixArea">
+                                            <div class="table-responsive border rounded-3 bg-body">
+                                                <table class="table align-middle text-center mb-0">
+                                                    <thead class="table-light">
+                                                        <tr><th class="text-start">Dạng bài</th><th>Cơ bản</th><th>Khá</th><th>Khó</th></tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% set random_matrix_topics = [
+                                                            ('inverse_trig_domain', 'Tập xác định', 1, 0, 0),
+                                                            ('equivalent_infinitesimal', 'Vô cùng bé tương đương', 1, 1, 0),
+                                                            ('limit_zero', 'Giới hạn tại 0', 0, 2, 1),
+                                                            ('limit_infinity', 'Giới hạn tại vô cùng', 0, 1, 1),
+                                                            ('continuity_parameter', 'Liên tục theo tham số', 1, 1, 0),
+                                                            ('discontinuity', 'Phân loại gián đoạn', 1, 1, 1)
+                                                        ] %}
+                                                        {% for topic_key, topic_label, easy_count, medium_count, hard_count in random_matrix_topics %}
+                                                        <tr>
+                                                            <td class="text-start fw-bold">{{ topic_label }}</td>
+                                                            <td><input class="form-control form-control-sm text-center" type="number" min="0" max="20" name="matrix_{{ topic_key }}_easy" value="{{ easy_count }}"></td>
+                                                            <td><input class="form-control form-control-sm text-center" type="number" min="0" max="20" name="matrix_{{ topic_key }}_medium" value="{{ medium_count }}"></td>
+                                                            <td><input class="form-control form-control-sm text-center" type="number" min="0" max="20" name="matrix_{{ topic_key }}_hard" value="{{ hard_count }}"></td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
                                         <div class="col-md-12" id="singleQuantityArea">
                                             <label class="form-label fw-bold">3. Số lượng câu hỏi:</label>
                                             <input type="number" class="form-control border-0 shadow-sm rounded-3 py-2"
@@ -290,17 +333,24 @@
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-12 text-end mt-4 border-top pt-4 border-secondary-subtle">
+                                        <div class="col-12 mt-4 border-top pt-4 border-secondary-subtle">
                                             <div id="successAlert"
                                                 class="alert alert-success d-none text-start mb-3 shadow-sm border-0 rounded-3">
                                                 <i class="fa-solid fa-circle-check me-2"></i><strong>Đã sinh đề.</strong>
                                                 Kiểm tra preview và lời giải trước khi xuất file.
                                             </div>
-                                            <button type="submit" id="btnGenerate"
-                                                class="btn px-5 py-2 rounded-pill fw-bold shadow hover-lift text-white"
-                                                style="background-color: #ff6600;">
-                                                <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Sinh & Xem Trước
-                                            </button>
+                                            <div class="d-flex flex-wrap justify-content-end gap-2">
+                                                <button type="button" id="btnFinalizeRandom"
+                                                    class="btn btn-outline-success px-4 py-2 rounded-pill fw-bold" disabled
+                                                    onclick="finalizeRandomExam()">
+                                                    <i class="fa-solid fa-box-archive me-2"></i>Thêm vào ngân hàng
+                                                </button>
+                                                <button type="submit" id="btnGenerate"
+                                                    class="btn px-5 py-2 rounded-pill fw-bold shadow hover-lift text-white"
+                                                    style="background-color: #ff6600;">
+                                                    <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Sinh & Xem Trước
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div id="randomExamSummary" class="alert alert-info border-0 shadow-sm mt-4 d-none"></div>
@@ -391,7 +441,7 @@
                                                 </div>
                                                 <div class="d-grid gap-2">
                                                     <button type="button" id="btnCheckAllQuestions" onclick="checkAllQuestions()" class="btn btn-outline-primary px-4 py-2 rounded-pill fw-bold shadow-sm hover-lift w-100" disabled>
-                                                        <i class="fa-solid fa-shield-halved me-2"></i>Kiểm tra toàn bộ đề
+                                                        <i class="fa-solid fa-shield-halved me-2"></i>Kiểm tra thông minh
                                                     </button>
                                                     <button type="button" id="btnGenerateBulk" onclick="generateBulkExam()" class="btn btn-success px-4 py-2 rounded-pill fw-bold shadow hover-lift w-100" disabled>
                                                         <i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất
@@ -993,6 +1043,59 @@
                 <button type="button" class="btn btn-light rounded-pill px-4 fw-bold" data-bs-dismiss="modal">Hủy</button>
                 <button type="button" id="btnSubmitTemplateSave" class="btn btn-primary rounded-pill px-5 fw-bold shadow hover-lift" onclick="submitTemplateSave()">
                     Lưu mẫu
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editRandomQuestionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content border-0 shadow-lg rounded-4 bg-body">
+            <div class="modal-header border-bottom-0 px-4 pt-4">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1"><i class="fa-solid fa-pen-to-square me-2"></i>Chỉnh sửa câu hỏi</h4>
+                    <div class="small text-muted" id="editRandomQuestionMeta"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <input type="hidden" id="editRandomVariantIndex">
+                <input type="hidden" id="editRandomQuestionIndex">
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Đề bài (LaTeX)</label>
+                    <textarea id="editRandomPrompt" class="form-control font-monospace" rows="4"></textarea>
+                </div>
+                <div class="row g-3" id="editRandomChoices">
+                    {% for choice_index in range(4) %}
+                    <div class="col-md-6">
+                        <div class="border rounded-3 p-3 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="fw-bold">Phương án {{ 'ABCD'[choice_index] }}</label>
+                                <label class="form-check mb-0">
+                                    <input class="form-check-input edit-random-correct" type="radio" name="editRandomCorrect" value="{{ choice_index }}">
+                                    <span class="form-check-label">Đáp án đúng</span>
+                                </label>
+                            </div>
+                            <textarea class="form-control font-monospace edit-random-choice" rows="2" data-choice-index="{{ choice_index }}"></textarea>
+                            <label class="form-check mt-2 mb-0">
+                                <input class="form-check-input edit-random-is-math" type="checkbox" data-choice-index="{{ choice_index }}" checked>
+                                <span class="form-check-label small">Nội dung là công thức toán</span>
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <label class="form-label fw-bold">Lời giải (LaTeX)</label>
+                    <textarea id="editRandomSolution" class="form-control font-monospace" rows="5"></textarea>
+                </div>
+                <div id="editRandomQuestionAlert" class="alert d-none mt-3 mb-0"></div>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4">
+                <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                <button type="button" id="btnSaveRandomQuestion" class="btn btn-primary rounded-pill px-5 fw-bold" onclick="saveRandomQuestionEdit()">
+                    <i class="fa-solid fa-floppy-disk me-2"></i>Lưu câu hỏi
                 </button>
             </div>
         </div>
@@ -3002,19 +3105,75 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             });
     }
 
-    function renderBulkReviewSummary(data) {
+    function renderStressTestSummary(data) {
         const summaryEl = document.getElementById('reviewSummaryAlert');
         if (!summaryEl) return;
 
         const statusClass = data.status === 'ok' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
         const iconClass = data.status === 'ok' ? 'fa-circle-check' : (data.status === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-xmark');
+        const totals = data.totals || {};
+        const coverage = data.coverage || {};
+        const answerPositions = coverage.answer_positions || {};
+        const metricHtml = `
+            <div class="row g-2 mt-2">
+                <div class="col-4"><div class="bg-body rounded border p-2"><strong>${escapeHtml(totals.ok || 0)}</strong><br><span class="text-success">Đạt</span></div></div>
+                <div class="col-4"><div class="bg-body rounded border p-2"><strong>${escapeHtml(totals.warning || 0)}</strong><br><span class="text-warning">Cảnh báo</span></div></div>
+                <div class="col-4"><div class="bg-body rounded border p-2"><strong>${escapeHtml(totals.error || 0)}</strong><br><span class="text-danger">Lỗi</span></div></div>
+            </div>`;
+        const globalIssuesHtml = (data.global_issues || []).map((issue) => `
+            <div class="border-top pt-2 mt-2">
+                <span class="badge bg-warning text-dark me-2">toàn mẫu</span>
+                <strong>${escapeHtml(issue.message)}</strong>
+                <div class="text-muted">${escapeHtml(issue.suggestion)}</div>
+            </div>`).join('');
+        const problemSeedsHtml = (data.problem_seeds || []).map((seedResult) => {
+            const seedClass = seedResult.status === 'error' ? 'danger' : 'warning';
+            const issuesHtml = (seedResult.issues || []).map((issue) => `
+                <div class="mt-2 ps-3 border-start border-${issue.severity === 'high' ? 'danger' : 'warning'}">
+                    <div class="fw-bold">${issue.question_index ? `Câu ${escapeHtml(issue.question_index)}: ` : ''}${escapeHtml(issue.message)}</div>
+                    <div class="text-muted">${escapeHtml(issue.suggestion)}</div>
+                </div>`).join('');
+            const hiddenText = seedResult.hidden_issue_count
+                ? `<div class="small text-muted mt-2">Còn ${escapeHtml(seedResult.hidden_issue_count)} vấn đề khác trong seed này.</div>`
+                : '';
+            return `
+                <div class="border-top pt-2 mt-2">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div><span class="badge bg-${seedClass} me-2">Seed ${escapeHtml(seedResult.seed)}</span><strong>${escapeHtml((seedResult.issues || []).length + (seedResult.hidden_issue_count || 0))} vấn đề</strong></div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="openStressSeed(${Number(seedResult.seed)})">
+                            <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Mở seed
+                        </button>
+                    </div>
+                    ${issuesHtml}${hiddenText}
+                </div>`;
+        }).join('');
+        const hiddenSeedsHtml = data.hidden_problem_seed_count
+            ? `<div class="text-muted mt-2">Còn ${escapeHtml(data.hidden_problem_seed_count)} seed có vấn đề chưa hiển thị.</div>`
+            : '';
+        const distribution = ['A', 'B', 'C', 'D']
+            .map((letter) => `${letter}: ${answerPositions[letter] || 0}`)
+            .join(' · ');
+
         summaryEl.className = `alert alert-${statusClass} text-start mb-3 shadow-sm border-0 rounded-3 py-2 small`;
         summaryEl.innerHTML = `
             <div class="fw-bold">
                 <i class="fa-solid ${iconClass} me-2"></i>${escapeHtml(data.summary)}
             </div>
-            <div class="text-muted">Đã kiểm tra toàn bộ câu hỏi trong tất cả seed đang preview.</div>
+            ${metricHtml}
+            <div class="text-muted mt-2">
+                ${escapeHtml(totals.questions_checked || 0)} lượt câu hỏi ·
+                ${escapeHtml(coverage.unique_variants || 0)} biến thể nội dung ·
+                Vị trí đáp án: ${escapeHtml(distribution)}
+                ${data.pdf_checked ? ` · ${escapeHtml(data.pdf_checked)} PDF mẫu đạt kiểm tra biên dịch` : ''}
+            </div>
+            ${globalIssuesHtml}${problemSeedsHtml}${hiddenSeedsHtml}
         `;
+    }
+
+    function openStressSeed(seed) {
+        document.getElementById('seedInput').value = String(seed);
+        previewAdvancedTemplate();
+        document.getElementById('seedInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     function checkAllQuestions() {
@@ -3029,36 +3188,35 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
 
         const originalText = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra toàn bộ...';
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra các seed đang xem...';
         if (summaryEl) {
             summaryEl.className = 'alert alert-info text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
-            summaryEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra toàn bộ câu hỏi trong các seed hiện tại...';
+            summaryEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra toàn bộ câu hỏi trong các seed đang preview...';
         }
-
-        questions.forEach((item) => {
-            const resultEl = document.getElementById(`${item.id}-result`);
-            if (resultEl) {
-                resultEl.className = 'mt-3 alert alert-info border-0 shadow-sm small';
-                resultEl.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang kiểm tra trong lượt toàn bộ...';
-            }
-        });
 
         fetch('/api/custom-exam/check-questions-ai', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ questions })
         })
-            .then(res => res.json())
-            .then(data => {
-                if (!data.success) {
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
                     if (summaryEl) {
                         summaryEl.className = 'alert alert-danger text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
-                        summaryEl.innerHTML = `<i class="fa-solid fa-circle-xmark me-2"></i>${escapeHtml(data.message || 'Không kiểm tra được toàn bộ đề.')}`;
+                        summaryEl.innerHTML = `<i class="fa-solid fa-circle-xmark me-2"></i>${escapeHtml(data.message || 'Không kiểm tra được các seed đang preview.')}`;
                     }
                     return;
                 }
 
-                renderBulkReviewSummary(data);
+                const statusClass = data.status === 'ok' ? 'success' : (data.status === 'warning' ? 'warning' : 'danger');
+                const iconClass = data.status === 'ok' ? 'fa-circle-check' : (data.status === 'warning' ? 'fa-triangle-exclamation' : 'fa-circle-xmark');
+                if (summaryEl) {
+                    summaryEl.className = `alert alert-${statusClass} text-start mb-3 shadow-sm border-0 rounded-3 py-2 small`;
+                    summaryEl.innerHTML = `
+                        <div class="fw-bold"><i class="fa-solid ${iconClass} me-2"></i>${escapeHtml(data.summary)}</div>
+                        <div class="text-muted">Chỉ kiểm tra các câu hỏi thuộc những seed đang hiển thị trong preview.</div>`;
+                }
                 (data.results || []).forEach((item) => {
                     const resultEl = document.getElementById(`${item.id}-result`);
                     if (resultEl) renderQuestionReview(resultEl, item);
@@ -3067,7 +3225,7 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             .catch(() => {
                 if (summaryEl) {
                     summaryEl.className = 'alert alert-danger text-start mb-3 shadow-sm border-0 rounded-3 py-2 small';
-                    summaryEl.innerHTML = '<i class="fa-solid fa-circle-xmark me-2"></i>Lỗi kết nối khi kiểm tra toàn bộ đề.';
+                    summaryEl.innerHTML = '<i class="fa-solid fa-circle-xmark me-2"></i>Lỗi kết nối khi kiểm tra các seed đang preview.';
                 }
             })
             .finally(() => {
@@ -3125,6 +3283,7 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         const alertBox = document.getElementById('successAlert');
         const btnTex = document.getElementById('btnExportTex');
         const btnPdf = document.getElementById('btnExportPdf');
+        const btnFinalize = document.getElementById('btnFinalizeRandom');
         const preview = document.getElementById('randomExamPreview');
         const summary = document.getElementById('randomExamSummary');
 
@@ -3132,6 +3291,8 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang sinh và kiểm tra câu...';
         btn.disabled = true;
         alertBox.classList.add('d-none'); btnTex.classList.add('disabled'); btnPdf.classList.add('disabled');
+        btnFinalize.disabled = true;
+        btnFinalize.innerHTML = '<i class="fa-solid fa-box-archive me-2"></i>Thêm vào ngân hàng';
         preview.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin fs-2 mb-3"></i><div>Đang tạo câu hỏi...</div></div>';
         summary.classList.add('d-none');
 
@@ -3142,10 +3303,12 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 btn.disabled = false;
                 if (ok && data.success) {
                     window.randomExamData = data;
+                    window.randomVariantIndex = 0;
                     renderRandomExamPreview(data);
                     alertBox.classList.remove('d-none');
                     btnTex.classList.remove('disabled');
                     btnPdf.classList.remove('disabled');
+                    btnFinalize.disabled = false;
                 } else {
                     preview.innerHTML = '';
                     alert("Có lỗi xảy ra: " + (data.message || 'Không sinh được đề.'));
@@ -3161,17 +3324,36 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
     function renderRandomExamPreview(data) {
         const preview = document.getElementById('randomExamPreview');
         const summary = document.getElementById('randomExamSummary');
+        const variants = data.variants || [{
+            seed: data.seed,
+            questions: data.questions || [],
+            revision: data.revision || 0,
+            overlap_ratio: 0
+        }];
+        const activeIndex = Math.min(window.randomVariantIndex || 0, variants.length - 1);
+        window.randomVariantIndex = activeIndex;
+        const activeVariant = variants[activeIndex];
         const topicBadges = (data.topic_counts || []).map((item) => {
             return `<span class="badge bg-primary-subtle text-primary border rounded-pill">${escapeHtml(item.label)}: ${item.count}</span>`;
         }).join('');
+        const variantTabs = variants.map((variant, index) => `
+            <button type="button" class="btn btn-sm ${index === activeIndex ? 'btn-primary' : 'btn-outline-primary'} rounded-pill"
+                onclick="selectRandomVariant(${index})">
+                Mã ${escapeHtml(variant.seed)}
+            </button>`).join('');
         summary.className = 'alert alert-info border-0 shadow-sm mt-4';
         summary.innerHTML = `
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <strong><i class="fa-solid fa-circle-check me-2"></i>${data.total_questions} câu, seed ${escapeHtml(data.seed)}</strong>
-                ${topicBadges}
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <strong><i class="fa-solid fa-circle-check me-2"></i>${data.total_questions} câu/mã · ${variants.length} mã đề</strong>
+                    ${activeVariant.revision ? `<span class="badge bg-secondary rounded-pill">Mã này đã chỉnh ${activeVariant.revision} lần</span>` : ''}
+                    ${activeVariant.overlap_ratio ? `<span class="badge bg-light text-dark border rounded-pill">Trùng tối đa ${Math.round(activeVariant.overlap_ratio * 100)}%</span>` : ''}
+                    ${topicBadges}
+                </div>
+                <div class="d-flex flex-wrap gap-2">${variantTabs}</div>
             </div>`;
 
-        preview.innerHTML = (data.questions || []).map((question) => {
+        preview.innerHTML = (activeVariant.questions || []).map((question, questionIndex) => {
             const options = (question.choices || []).map((choice) => {
                 const content = choice.is_math ? `$${choice.tex}$` : escapeHtml(choice.tex);
                 const style = choice.is_correct
@@ -3191,7 +3373,30 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                             <span class="badge bg-primary-subtle text-primary border rounded-pill me-1">${escapeHtml(question.topic_label)}</span>
                             <span class="badge bg-warning-subtle text-warning-emphasis border rounded-pill">${escapeHtml(question.difficulty_label)}</span>
                         </div>
-                        <span class="small text-muted">Câu ${question.number} · Đáp án ${question.correct_letter}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="small text-muted">Câu ${question.number} · Đáp án ${question.correct_letter}</span>
+                            <button type="button" class="btn btn-sm ${question.locked ? 'btn-warning' : 'btn-outline-secondary'}"
+                                onclick="toggleRandomQuestionLock(${activeIndex}, ${questionIndex})"
+                                title="${question.locked ? 'Mở khóa câu' : 'Khóa câu'}">
+                                <i class="fa-solid ${question.locked ? 'fa-lock' : 'fa-lock-open'}"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="openRandomQuestionEditor(${activeIndex}, ${questionIndex})"
+                                ${question.locked ? 'disabled' : ''} title="Chỉnh sửa câu">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                onclick="regenerateRandomQuestion(${activeIndex}, ${questionIndex})"
+                                ${question.locked ? 'disabled' : ''} title="Sinh lại riêng câu này">
+                                <i class="fa-solid fa-rotate"></i>
+                            </button>
+                            ${question.manually_edited ? `
+                            <button type="button" class="btn btn-sm btn-outline-danger"
+                                onclick="resetRandomQuestion(${activeIndex}, ${questionIndex})"
+                                ${question.locked ? 'disabled' : ''} title="Khôi phục bản tự động">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                            </button>` : ''}
+                        </div>
                     </div>
                     <div class="fw-bold mb-3">Câu ${question.number}. ${question.prompt_tex}</div>
                     <div class="row g-2 mb-3">${options}</div>
@@ -3207,7 +3412,185 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         }
     }
 
+    function selectRandomVariant(variantIndex) {
+        window.randomVariantIndex = variantIndex;
+        renderRandomExamPreview(window.randomExamData);
+    }
+
+    function getRandomVariant(variantIndex) {
+        return window.randomExamData?.variants?.[variantIndex]
+            || (variantIndex === 0 ? window.randomExamData : null);
+    }
+
+    function toggleRandomQuestionLock(variantIndex, questionIndex) {
+        const variant = getRandomVariant(variantIndex);
+        const question = variant?.questions?.[questionIndex];
+        if (!question) return;
+        const locked = !question.locked;
+        fetch(`/api/generate-exam/variants/${variantIndex}/questions/${questionIndex}/lock`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ locked })
+        })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không cập nhật được trạng thái khóa.');
+                    return;
+                }
+                question.locked = data.locked;
+                renderRandomExamPreview(window.randomExamData);
+            })
+            .catch(() => alert('Lỗi kết nối khi cập nhật trạng thái khóa.'));
+    }
+
+    function regenerateRandomQuestion(variantIndex, questionIndex) {
+        const variant = getRandomVariant(variantIndex);
+        const question = variant?.questions?.[questionIndex];
+        if (!question || question.locked) return;
+        if (!confirm(`Sinh lại câu ${questionIndex + 1} và giữ nguyên dạng bài, mức độ?`)) return;
+
+        fetch(`/api/generate-exam/variants/${variantIndex}/questions/${questionIndex}/regenerate`, { method: 'POST' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không sinh lại được câu hỏi.');
+                    return;
+                }
+                variant.questions[questionIndex] = data.question;
+                variant.revision = data.revision;
+                document.getElementById('btnFinalizeRandom').disabled = false;
+                document.getElementById('btnFinalizeRandom').innerHTML = '<i class="fa-solid fa-box-archive me-2"></i>Thêm vào ngân hàng';
+                renderRandomExamPreview(window.randomExamData);
+            })
+            .catch(() => alert('Lỗi kết nối khi sinh lại câu hỏi.'));
+    }
+
+    function openRandomQuestionEditor(variantIndex, questionIndex) {
+        const variant = getRandomVariant(variantIndex);
+        const question = variant?.questions?.[questionIndex];
+        if (!question || question.locked) return;
+        document.getElementById('editRandomVariantIndex').value = variantIndex;
+        document.getElementById('editRandomQuestionIndex').value = questionIndex;
+        document.getElementById('editRandomQuestionMeta').textContent = `Mã ${variant.seed} · Câu ${questionIndex + 1} · ${question.topic_label}`;
+        document.getElementById('editRandomPrompt').value = question.prompt_tex || '';
+        document.getElementById('editRandomSolution').value = question.solution_tex || '';
+        document.querySelectorAll('.edit-random-choice').forEach((input, index) => {
+            input.value = question.choices?.[index]?.tex || '';
+        });
+        document.querySelectorAll('.edit-random-is-math').forEach((input, index) => {
+            input.checked = question.choices?.[index]?.is_math !== false;
+        });
+        document.querySelectorAll('.edit-random-correct').forEach((input, index) => {
+            input.checked = Boolean(question.choices?.[index]?.is_correct);
+        });
+        document.getElementById('editRandomQuestionAlert').className = 'alert d-none mt-3 mb-0';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('editRandomQuestionModal')).show();
+    }
+
+    function saveRandomQuestionEdit() {
+        const variantIndex = Number(document.getElementById('editRandomVariantIndex').value);
+        const questionIndex = Number(document.getElementById('editRandomQuestionIndex').value);
+        const correctInput = document.querySelector('.edit-random-correct:checked');
+        const alertBox = document.getElementById('editRandomQuestionAlert');
+        if (!correctInput) {
+            alertBox.className = 'alert alert-warning mt-3 mb-0';
+            alertBox.textContent = 'Cần chọn đúng một đáp án đúng.';
+            return;
+        }
+        const correctIndex = Number(correctInput.value);
+        const choices = Array.from(document.querySelectorAll('.edit-random-choice')).map((input, index) => ({
+            tex: input.value.trim(),
+            is_correct: index === correctIndex,
+            is_math: document.querySelector(`.edit-random-is-math[data-choice-index="${index}"]`).checked
+        }));
+        const payload = {
+            prompt_tex: document.getElementById('editRandomPrompt').value.trim(),
+            solution_tex: document.getElementById('editRandomSolution').value.trim(),
+            choices
+        };
+        const button = document.getElementById('btnSaveRandomQuestion');
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang lưu...';
+        fetch(`/api/generate-exam/variants/${variantIndex}/questions/${questionIndex}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alertBox.className = 'alert alert-danger mt-3 mb-0';
+                    alertBox.textContent = data.message || 'Không lưu được câu hỏi.';
+                    return;
+                }
+                const variant = getRandomVariant(variantIndex);
+                variant.questions[questionIndex] = data.question;
+                variant.revision = data.revision;
+                document.getElementById('btnFinalizeRandom').disabled = false;
+                bootstrap.Modal.getInstance(document.getElementById('editRandomQuestionModal')).hide();
+                renderRandomExamPreview(window.randomExamData);
+            })
+            .catch(() => {
+                alertBox.className = 'alert alert-danger mt-3 mb-0';
+                alertBox.textContent = 'Lỗi kết nối khi lưu câu hỏi.';
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            });
+    }
+
+    function resetRandomQuestion(variantIndex, questionIndex) {
+        if (!confirm(`Khôi phục câu ${questionIndex + 1} về bản tự động trước khi sửa?`)) return;
+        fetch(`/api/generate-exam/variants/${variantIndex}/questions/${questionIndex}/reset`, { method: 'POST' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    alert(data.message || 'Không khôi phục được câu hỏi.');
+                    return;
+                }
+                const variant = getRandomVariant(variantIndex);
+                variant.questions[questionIndex] = data.question;
+                variant.revision = data.revision;
+                document.getElementById('btnFinalizeRandom').disabled = false;
+                renderRandomExamPreview(window.randomExamData);
+            })
+            .catch(() => alert('Lỗi kết nối khi khôi phục câu hỏi.'));
+    }
+
+    function finalizeRandomExam() {
+        const btn = document.getElementById('btnFinalizeRandom');
+        if (!window.randomExamData?.questions?.length || btn.disabled) return;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang lưu...';
+
+        fetch('/api/generate-exam/finalize', { method: 'POST' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }))
+            .then(({ ok, data }) => {
+                if (!ok || !data.success) {
+                    const issues = data.quality_report?.issues || [];
+                    alert((data.message || 'Không thêm được đề vào ngân hàng.') + (issues.length ? `\n\n- ${issues.join('\n- ')}` : ''));
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    return;
+                }
+                btn.innerHTML = '<i class="fa-solid fa-circle-check me-2"></i>Đã lưu vào ngân hàng';
+                const alertBox = document.getElementById('successAlert');
+                alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i><strong>Đã chốt đề.</strong> ${escapeHtml(data.bank_exam?.title || '')} hiện đã có trong ngân hàng đề thi.`;
+                alertBox.classList.remove('d-none');
+            })
+            .catch(() => {
+                alert('Lỗi kết nối khi chốt đề.');
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            });
+    }
+
     function toggleRandomQuantityInputs() {
+        if (document.getElementById('randomUseMatrix')?.checked) return;
         const difficulty = document.getElementById('randomDifficulty').value;
         const singleArea = document.getElementById('singleQuantityArea');
         const mixedArea = document.getElementById('mixedQuantityArea');
@@ -3215,6 +3598,17 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             singleArea.classList.add('d-none'); mixedArea.classList.remove('d-none');
         } else {
             singleArea.classList.remove('d-none'); mixedArea.classList.add('d-none');
+        }
+    }
+
+    function toggleRandomMatrix() {
+        const useMatrix = document.getElementById('randomUseMatrix').checked;
+        document.getElementById('randomMatrixArea').classList.toggle('d-none', !useMatrix);
+        if (useMatrix) {
+            document.getElementById('singleQuantityArea').classList.add('d-none');
+            document.getElementById('mixedQuantityArea').classList.add('d-none');
+        } else {
+            toggleRandomQuantityInputs();
         }
     }
 

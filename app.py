@@ -1,10 +1,16 @@
 from flask import Flask, render_template, redirect, url_for, request, flash, Response, jsonify, session, send_file, abort, g
 from models import db, User, Badge, Class, ClassJoinRequest, ExamTemplate, ExamBank, Assignment, AssignmentAttempt, Submission, Notification
 from random_exam import (
+    GeneratedChoice,
+    GeneratedQuestion,
     GENERATORS as RANDOM_EXAM_GENERATORS,
     TOPIC_LABELS as RANDOM_EXAM_TOPIC_LABELS,
+    generate_replacement_question,
     generate_random_questions,
+    generate_random_variants,
+    generated_question_from_dict,
     render_random_exam_tex,
+    validate_generated_question,
 )
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate, upgrade, stamp
@@ -15,6 +21,12 @@ from functools import wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import sympy as sp
+from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication_application,
+    parse_expr,
+    standard_transformations,
+)
 import random
 import os
 import subprocess
@@ -78,6 +90,7 @@ app.config['ATTEMPT_SWEEP_INTERVAL_SECONDS'] = max(
     int(os.getenv('ATTEMPT_SWEEP_INTERVAL_SECONDS', '15')),
     5
 )
+app.config['PDF_QUALITY_GATE'] = os.getenv('PDF_QUALITY_GATE', '1') == '1'
 
 
 def app_now():
@@ -249,8 +262,12 @@ def get_submission_lock(attempt_id):
         return lock
 
 
+def get_current_exam_output_dir():
+    return Path(app.config.get('CURRENT_EXAM_DIR') or (INSTANCE_DIR / 'current_exams'))
+
+
 def store_current_exam_tex(tex_content):
-    output_dir = Path(app.config.get('CURRENT_EXAM_DIR') or (INSTANCE_DIR / 'current_exams'))
+    output_dir = get_current_exam_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f'user_{current_user.id}.tex'
     temporary_path = output_dir / f'user_{current_user.id}.tmp'
@@ -262,11 +279,31 @@ def store_current_exam_tex(tex_content):
 
 
 def load_current_exam_tex():
-    output_dir = Path(app.config.get('CURRENT_EXAM_DIR') or (INSTANCE_DIR / 'current_exams'))
+    output_dir = get_current_exam_output_dir()
     output_path = output_dir / f'user_{current_user.id}.tex'
     if output_path.exists():
         return output_path.read_text(encoding='utf-8')
     return session.get('current_exam_tex')
+
+
+def store_random_exam_draft(draft):
+    output_dir = get_current_exam_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f'user_{current_user.id}_random.json'
+    temporary_path = output_dir / f'user_{current_user.id}_random.tmp'
+    temporary_path.write_text(json.dumps(draft, ensure_ascii=False), encoding='utf-8')
+    temporary_path.replace(output_path)
+
+
+def load_random_exam_draft():
+    output_path = get_current_exam_output_dir() / f'user_{current_user.id}_random.json'
+    if not output_path.exists():
+        return None
+    try:
+        draft = json.loads(output_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return draft if isinstance(draft, dict) else None
 
 
 @login_manager.user_loader
@@ -313,6 +350,11 @@ def parse_advanced_template(template_text):
         def process_block(match):
             block_name = match.group(1) # Tên khối (VD: cau1)
             block_content = match.group(2) # Nội dung bên trong khối
+            block_seed_bytes = hashlib.sha256(
+                f'{seed_int}:{block_name}'.encode('utf-8')
+            ).digest()[:8]
+            block_seed = int.from_bytes(block_seed_bytes, 'big')
+            block_rng = random.Random(block_seed)
             
             # Tách biến của riêng khối này
             var_block_match = re.search(r'%%variables%%(.*?)%%variables%%', block_content, re.DOTALL | re.IGNORECASE)
@@ -358,7 +400,7 @@ def parse_advanced_template(template_text):
                     if v: total_combinations *= len(v)
 
                 if total_combinations > 0:
-                    current_index = max(0, seed_int - 1) % total_combinations
+                    current_index = block_seed % total_combinations
                     temp_idx = current_index
                     for var_name, values in declarations.items():
                         if values:
@@ -403,7 +445,7 @@ def parse_advanced_template(template_text):
                     if correct_tex in pool_latex:
                         pool_latex.remove(correct_tex)
                         
-                    distractors = random.sample(pool_latex, min(3, len(pool_latex)))
+                    distractors = block_rng.sample(pool_latex, min(3, len(pool_latex)))
                     while len(distractors) < 3:
                         distractors.append("\\text{Khác}")
                         
@@ -414,7 +456,7 @@ def parse_advanced_template(template_text):
                         f"\\Sai{{$ {distractors[1]} $}}",
                         f"\\Sai{{$ {distractors[2]} $}}"
                     ]
-                    random.shuffle(options_html)
+                    block_rng.shuffle(options_html)
                     return "\n".join(options_html)
 
                 try:
@@ -458,7 +500,7 @@ def parse_advanced_template(template_text):
                 correct = text_match.group(1).strip()
                 wrongs = [w.strip() for w in text_match.group(2).split(';') if w.strip()]
                 
-                distractors = random.sample(wrongs, min(3, len(wrongs)))
+                distractors = block_rng.sample(wrongs, min(3, len(wrongs)))
                 while len(distractors) < 3:
                     distractors.append("Sai")
                     
@@ -469,7 +511,7 @@ def parse_advanced_template(template_text):
                     f"\\Sai{{{distractors[1]}}}",
                     f"\\Sai{{{distractors[2]}}}"
                 ]
-                random.shuffle(options_html)
+                block_rng.shuffle(options_html)
                 return "\n".join(options_html)
 
             # Regex SIÊU CẤP hỗ trợ xuống dòng, khoảng trắng, ngoặc lồng nhau
@@ -487,6 +529,165 @@ def parse_advanced_template(template_text):
         return final_document
 
     return generate_instance
+
+
+def extract_latex_choices(text):
+    choices = []
+    command_pattern = re.compile(r'\\(Dung|Sai)\s*\{')
+    for match in command_pattern.finditer(str(text or '')):
+        command = match.group(1)
+        start = match.end()
+        depth = 1
+        idx = start
+        while idx < len(text) and depth > 0:
+            char = text[idx]
+            prev = text[idx - 1] if idx > 0 else ''
+            if char == '{' and prev != '\\':
+                depth += 1
+            elif char == '}' and prev != '\\':
+                depth -= 1
+            idx += 1
+
+        if depth == 0:
+            choices.append({
+                'type': command,
+                'body': text[start:idx - 1].strip(),
+                'start': match.start(),
+                'end': idx,
+            })
+    return choices
+
+
+def latex_choice_to_sympy(choice_text):
+    """Parse a conservative subset of LaTeX used by generated answer choices."""
+    value = str(choice_text or '').strip()
+    value = re.sub(r'^\s*\$|\$\s*$', '', value).strip().rstrip('.。')
+    value = value.replace('\\left', '').replace('\\right', '')
+    value = value.replace('\\dfrac', '\\frac')
+    value = re.sub(r'\\(?:,|;|!|quad\b|qquad\b)', '', value)
+
+    unsupported = (
+        '\\text', '\\mathrm', '\\mathbb', '\\begin', '\\end',
+        '\\infty', '[', ']', '=', ',', ':', ';',
+    )
+    if not value or any(token in value for token in unsupported):
+        return None
+
+    simple_fraction = re.compile(r'\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}')
+    simple_root = re.compile(r'\\sqrt\s*\{([^{}]+)\}')
+    for _ in range(8):
+        updated = simple_fraction.sub(r'((\1)/(\2))', value)
+        updated = simple_root.sub(r'sqrt(\1)', updated)
+        if updated == value:
+            break
+        value = updated
+
+    command_replacements = {
+        '\\arcsin': 'asin',
+        '\\arccos': 'acos',
+        '\\arctan': 'atan',
+        '\\sinh': 'sinh',
+        '\\cosh': 'cosh',
+        '\\tanh': 'tanh',
+        '\\sin': 'sin',
+        '\\cos': 'cos',
+        '\\tan': 'tan',
+        '\\ln': 'log',
+        '\\log': 'log',
+        '\\exp': 'exp',
+        '\\pi': 'pi',
+    }
+    for command, replacement in command_replacements.items():
+        value = value.replace(command, replacement)
+
+    value = re.sub(r'\^\s*\{([^{}]+)\}', r'^(\1)', value)
+    value = value.replace('{', '(').replace('}', ')')
+    value = re.sub(r'\s+', ' ', value).strip()
+
+    if '\\' in value or not re.fullmatch(r'[0-9A-Za-z+\-*/^().\s]+', value):
+        return None
+    if '__' in value or re.search(r'(?<!\d)\.|\.(?!\d)', value):
+        return None
+
+    allowed_names = {
+        'x', 'y', 'z', 't', 'k', 'n', 'p', 'pi',
+        'sin', 'cos', 'tan', 'asin', 'acos', 'atan',
+        'sinh', 'cosh', 'tanh', 'sqrt', 'log', 'exp',
+    }
+    identifiers = set(re.findall(r'[A-Za-z][A-Za-z0-9]*', value))
+    if identifiers - allowed_names:
+        return None
+
+    symbols = {name: sp.Symbol(name) for name in ('x', 'y', 'z', 't', 'k', 'n', 'p')}
+    local_dict = {
+        **symbols,
+        'pi': sp.pi,
+        'sin': sp.sin,
+        'cos': sp.cos,
+        'tan': sp.tan,
+        'asin': sp.asin,
+        'acos': sp.acos,
+        'atan': sp.atan,
+        'sinh': sp.sinh,
+        'cosh': sp.cosh,
+        'tanh': sp.tanh,
+        'sqrt': sp.sqrt,
+        'log': sp.log,
+        'exp': sp.exp,
+    }
+    global_dict = {
+        'Integer': sp.Integer,
+        'Float': sp.Float,
+        'Rational': sp.Rational,
+        'Symbol': sp.Symbol,
+        'Function': sp.Function,
+    }
+    transformations = standard_transformations + (
+        convert_xor,
+        implicit_multiplication_application,
+    )
+    try:
+        expression = parse_expr(
+            value,
+            local_dict=local_dict,
+            global_dict=global_dict,
+            transformations=transformations,
+            evaluate=True,
+        )
+    except Exception:
+        return None
+
+    if not isinstance(expression, sp.Basic) or expression.has(sp.zoo, sp.nan):
+        return None
+    return expression
+
+
+def find_equivalent_choice_pairs(choices):
+    parsed = []
+    for index, choice in enumerate(choices, start=1):
+        expression = latex_choice_to_sympy(choice.get('body'))
+        if expression is not None:
+            parsed.append((index, choice, expression))
+
+    pairs = []
+    for left_index in range(len(parsed)):
+        first_number, first_choice, first_expr = parsed[left_index]
+        for right_index in range(left_index + 1, len(parsed)):
+            second_number, second_choice, second_expr = parsed[right_index]
+            try:
+                equivalent = sp.simplify(first_expr - second_expr) == 0
+            except Exception:
+                equivalent = False
+            if equivalent:
+                pairs.append({
+                    'first': first_number,
+                    'second': second_number,
+                    'includes_correct': (
+                        first_choice.get('type') == 'Dung'
+                        or second_choice.get('type') == 'Dung'
+                    ),
+                })
+    return pairs
 
 def review_question_content(question_content):
     issues = []
@@ -644,6 +845,15 @@ def review_question_content(question_content):
                 )
             else:
                 seen_choices[normalized] = idx
+
+        for pair in find_equivalent_choice_pairs(choices):
+            severity = 'high' if pair['includes_correct'] else 'medium'
+            add_issue(
+                'semantic',
+                severity,
+                f"Đáp án lựa chọn {pair['first']} và {pair['second']} tương đương về mặt toán học.",
+                'Thay một phương án nhiễu khác; các biểu thức khác cách viết nhưng cùng giá trị vẫn được xem là trùng đáp án.'
+            )
 
     display_math_blocks = re.findall(r'\\\[([\s\S]*?)\\\]', question_content)
     if any(re.search(r'(?<!\\)\$', block) for block in display_math_blocks):
@@ -906,6 +1116,212 @@ def parse_assignment_questions(tex_content):
             answer_key.append(correct_choice)
 
     return questions, answer_key
+
+
+def run_custom_template_stress_test(template_text, seed_count):
+    seed_count = max(1, min(int(seed_count), 100))
+    generator = parse_advanced_template(template_text)
+    expected_question_count = None
+    output_hashes = set()
+    answer_positions = {letter: 0 for letter in 'ABCD'}
+    records = []
+    pdf_samples = {}
+    deterministic_seeds = {1, max(1, (seed_count + 1) // 2), seed_count}
+
+    def add_record_issue(record, issue_type, severity, message, suggestion, question_index=None):
+        record['issues'].append({
+            'type': issue_type,
+            'severity': severity,
+            'message': message,
+            'suggestion': suggestion,
+            'question_index': question_index,
+        })
+
+    first_problem_seed = None
+    for seed in range(1, seed_count + 1):
+        record = {'seed': seed, 'issues': [], 'question_count': 0}
+        generated = ''
+        try:
+            generated = generator(seed)
+        except Exception as exc:
+            add_record_issue(
+                record,
+                'generation',
+                'high',
+                f'Seed {seed} không sinh được đề: {str(exc)[:240]}',
+                'Mở seed này và kiểm tra khai báo biến cùng các biểu thức @...@.',
+            )
+            records.append(record)
+            if first_problem_seed is None:
+                first_problem_seed = seed
+            continue
+
+        output_hashes.add(hashlib.sha256(generated.encode('utf-8')).hexdigest())
+        if seed in {1, seed_count}:
+            pdf_samples[seed] = generated
+
+        if seed in deterministic_seeds:
+            try:
+                if generator(seed) != generated:
+                    add_record_issue(
+                        record,
+                        'seed',
+                        'high',
+                        f'Seed {seed} cho kết quả không ổn định khi sinh lại.',
+                        'Không dùng nguồn ngẫu nhiên toàn cục trong template; mọi lựa chọn phải phụ thuộc vào seed.',
+                    )
+            except Exception as exc:
+                add_record_issue(
+                    record,
+                    'seed',
+                    'high',
+                    f'Seed {seed} lỗi khi kiểm tra tính ổn định: {str(exc)[:200]}',
+                    'Kiểm tra biểu thức hoặc biến có trạng thái thay đổi giữa các lần chạy.',
+                )
+
+        question_blocks = re.findall(
+            r'\\begin\s*\{question\}[\s\S]*?\\end\s*\{question\}',
+            generated,
+        )
+        record['question_count'] = len(question_blocks)
+        if expected_question_count is None:
+            expected_question_count = len(question_blocks)
+
+        if not question_blocks:
+            add_record_issue(
+                record,
+                'structure',
+                'high',
+                f'Seed {seed} không có môi trường question hợp lệ.',
+                'Kiểm tra cặp \\begin{question} và \\end{question} trong template.',
+            )
+        elif len(question_blocks) != expected_question_count:
+            add_record_issue(
+                record,
+                'structure',
+                'high',
+                f'Seed {seed} có {len(question_blocks)} câu, khác mức chuẩn {expected_question_count} câu.',
+                'Không để điều kiện theo biến làm mất hoặc tạo thêm môi trường question.',
+            )
+
+        parsed_questions, answer_key = parse_assignment_questions(generated)
+        if len(parsed_questions) != len(question_blocks) or len(answer_key) != len(question_blocks):
+            add_record_issue(
+                record,
+                'answer',
+                'high',
+                f'Seed {seed} không tách đủ câu hỏi hoặc đáp án đúng.',
+                'Mỗi câu cần đúng một \\Dung{...} và các lựa chọn phải nằm trong môi trường question.',
+            )
+        for letter in answer_key:
+            if letter in answer_positions:
+                answer_positions[letter] += 1
+
+        for question_index, block in enumerate(question_blocks, start=1):
+            review = review_question_content(block)
+            for issue in review.get('issues', []):
+                add_record_issue(
+                    record,
+                    issue.get('type', 'quality'),
+                    issue.get('severity', 'medium'),
+                    issue.get('message', 'Câu hỏi cần được kiểm tra lại.'),
+                    issue.get('suggestion', 'Mở seed này để kiểm tra.'),
+                    question_index=question_index,
+                )
+
+        if record['issues'] and first_problem_seed is None:
+            first_problem_seed = seed
+            pdf_samples[seed] = generated
+        records.append(record)
+
+    if first_problem_seed is not None and first_problem_seed not in pdf_samples:
+        problem_record = next((item for item in records if item['seed'] == first_problem_seed), None)
+        if problem_record:
+            try:
+                pdf_samples[first_problem_seed] = generator(first_problem_seed)
+            except Exception:
+                pass
+
+    pdf_checked = 0
+    if app.config.get('PDF_QUALITY_GATE', True):
+        for seed, generated in list(pdf_samples.items())[:3]:
+            if '\\documentclass' not in generated or '\\begin{document}' not in generated:
+                continue
+            pdf_checked += 1
+            _pdf_bytes, compile_error = compile_tex_pdf_bytes(generated)
+            if compile_error:
+                record = next(item for item in records if item['seed'] == seed)
+                add_record_issue(
+                    record,
+                    'pdf',
+                    'high',
+                    f'Seed {seed} không biên dịch được PDF: {compile_error[:260]}',
+                    'Mở seed này, sửa lỗi LaTeX được nêu rồi kiểm thử lại mẫu.',
+                )
+
+    global_issues = []
+    if '%%variables%%' in template_text and len(output_hashes) <= 1 and seed_count >= 10:
+        global_issues.append({
+            'type': 'coverage',
+            'severity': 'medium',
+            'message': f'{seed_count} seed chỉ tạo ra một biến thể nội dung.',
+            'suggestion': 'Kiểm tra lại tập giá trị biến hoặc cách sử dụng biến trong nội dung câu hỏi.',
+        })
+
+    answer_total = sum(answer_positions.values())
+    if answer_total >= 12:
+        dominant_letter, dominant_count = max(answer_positions.items(), key=lambda item: item[1])
+        if dominant_count / answer_total > 0.75:
+            global_issues.append({
+                'type': 'distribution',
+                'severity': 'medium',
+                'message': f'{dominant_letter} là vị trí đáp án đúng trong {dominant_count}/{answer_total} câu đã thử.',
+                'suggestion': 'Bổ sung trộn lựa chọn hoặc kiểm tra lại cách dùng AutoText/AutoMath.',
+            })
+
+    totals = {'ok': 0, 'warning': 0, 'error': 0}
+    total_issues = len(global_issues)
+    problem_records = []
+    for record in records:
+        total_issues += len(record['issues'])
+        has_high = any(issue['severity'] == 'high' for issue in record['issues'])
+        status = 'error' if has_high else ('warning' if record['issues'] else 'ok')
+        record['status'] = status
+        totals[status] += 1
+        if status != 'ok':
+            problem_records.append({
+                **record,
+                'issues': record['issues'][:8],
+                'hidden_issue_count': max(0, len(record['issues']) - 8),
+            })
+
+    global_has_high = any(issue['severity'] == 'high' for issue in global_issues)
+    overall_status = 'error' if totals['error'] or global_has_high else (
+        'warning' if totals['warning'] or global_issues else 'ok'
+    )
+    summary = (
+        f"Đã kiểm thử {seed_count} seed: {totals['ok']} đạt, "
+        f"{totals['warning']} cảnh báo, {totals['error']} lỗi."
+    )
+    return {
+        'status': overall_status,
+        'summary': summary,
+        'totals': {
+            **totals,
+            'seeds_checked': seed_count,
+            'questions_checked': sum(record['question_count'] for record in records),
+            'issues': total_issues,
+        },
+        'problem_seeds': problem_records[:30],
+        'hidden_problem_seed_count': max(0, len(problem_records) - 30),
+        'global_issues': global_issues,
+        'coverage': {
+            'unique_variants': len(output_hashes),
+            'answer_positions': answer_positions,
+        },
+        'pdf_checked': pdf_checked,
+        'mode': 'rule-symbolic',
+    }
 
 
 def get_assignment_max_attempts(assignment):
@@ -2522,67 +2938,543 @@ def api_delete_class(class_id):
 # =====================================================================
 # --- CÁC ROUTE XỬ LÝ SINH ĐỀ (GIỮ NGUYÊN) ---
 # =====================================================================
+def parse_random_exam_blueprint(form):
+    blueprint = {}
+    total = 0
+    for topic in RANDOM_EXAM_TOPIC_LABELS:
+        levels = {}
+        for difficulty in ('easy', 'medium', 'hard'):
+            raw_value = form.get(f'matrix_{topic}_{difficulty}', 0)
+            try:
+                count = int(raw_value or 0)
+            except (TypeError, ValueError):
+                raise ValueError('Số lượng trong ma trận đề phải là số nguyên.')
+            if count < 0:
+                raise ValueError('Số lượng trong ma trận đề không được âm.')
+            levels[difficulty] = count
+            total += count
+        blueprint[topic] = levels
+    if total < 1 or total > 40:
+        raise ValueError('Mỗi mã đề trong ma trận cần từ 1 đến 40 câu hỏi.')
+    return blueprint, total
+
+
+def serialize_random_variant(seed, questions, overlap_ratio=0.0):
+    payloads = []
+    for index, question in enumerate(questions, start=1):
+        payload = question.to_dict(index)
+        payload.update({
+            'locked': False,
+            'manually_edited': False,
+            'original_auto': None,
+        })
+        payloads.append(payload)
+    return {
+        'seed': seed,
+        'questions': payloads,
+        'revision': 0,
+        'overlap_ratio': overlap_ratio,
+    }
+
+
+def get_random_draft_variants(draft):
+    if not draft:
+        return []
+    variants = draft.get('variants')
+    if isinstance(variants, list):
+        return variants
+    questions = draft.get('questions')
+    if isinstance(questions, list):
+        return [{
+            'seed': draft.get('seed', 1),
+            'questions': questions,
+            'revision': draft.get('revision', 0),
+            'overlap_ratio': 0.0,
+        }]
+    return []
+
+
+def combine_random_exam_tex(rendered_variants):
+    if not rendered_variants:
+        return ''
+    first_content = rendered_variants[0]['content']
+    first_match = re.search(
+        r'\\begin\s*\{document\}(.*?)\\end\s*\{document\}',
+        first_content,
+        re.DOTALL,
+    )
+    if not first_match:
+        return first_content
+
+    preamble = first_content[:first_match.start()] + '\\begin{document}\n'
+    preamble = re.sub(r'\\MaDeThi\{[^{}]*\}', r'\\MaDeThi{NHIỀU MÃ}', preamble)
+    bodies = []
+    for item in rendered_variants:
+        match = re.search(
+            r'\\begin\s*\{document\}(.*?)\\end\s*\{document\}',
+            item['content'],
+            re.DOTALL,
+        )
+        if match:
+            bodies.append(
+                f"\\begin{{center}}\\Large\\textbf{{MÃ ĐỀ: {item['seed']}}}\\end{{center}}\n"
+                + match.group(1).strip()
+            )
+    return preamble + '\n\\newpage\n'.join(bodies) + '\n\\end{document}'
+
+
 @app.route('/api/generate-exam', methods=['POST'])
 @role_required('teacher')
 def api_generate_exam():
     title = str(request.form.get('exam_title') or 'Đề thi Giải tích I').strip()
     difficulty = str(request.form.get('difficulty') or 'medium').strip().lower()
+    use_matrix = parse_bool(request.form.get('use_matrix'))
     topics = request.form.getlist('topics')
     if not topics:
         topics = list(RANDOM_EXAM_GENERATORS)
 
     try:
         seed = int(request.form.get('seed') or 1)
+        variant_count = int(request.form.get('variant_count') or 1)
     except (TypeError, ValueError):
-        return jsonify({'success': False, 'message': 'Seed phải là một số nguyên.'}), 400
+        return jsonify({'success': False, 'message': 'Seed và số mã đề phải là số nguyên.'}), 400
 
+    blueprint = None
     try:
-        if difficulty == 'mixed':
+        if use_matrix:
+            blueprint, total_questions = parse_random_exam_blueprint(request.form)
+            difficulty_counts = {'easy': 0, 'medium': 0, 'hard': 0}
+        elif difficulty == 'mixed':
             difficulty_counts = {
                 'easy': int(request.form.get('qty_easy') or 0),
                 'medium': int(request.form.get('qty_medium') or 0),
                 'hard': int(request.form.get('qty_hard') or 0),
             }
+            total_questions = sum(difficulty_counts.values())
         elif difficulty in {'easy', 'medium', 'hard'}:
             quantity = int(request.form.get('quantity') or 0)
             difficulty_counts = {'easy': 0, 'medium': 0, 'hard': 0}
             difficulty_counts[difficulty] = quantity
+            total_questions = quantity
         else:
             return jsonify({'success': False, 'message': 'Mức độ sinh đề không hợp lệ.'}), 400
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
     except (TypeError, ValueError):
         return jsonify({'success': False, 'message': 'Số lượng câu hỏi phải là số nguyên.'}), 400
 
     if any(value < 0 for value in difficulty_counts.values()):
         return jsonify({'success': False, 'message': 'Số lượng câu hỏi không được âm.'}), 400
-    total_questions = sum(difficulty_counts.values())
     if total_questions < 1 or total_questions > 40:
         return jsonify({'success': False, 'message': 'Mỗi đề cần từ 1 đến 40 câu hỏi.'}), 400
 
     try:
-        questions = generate_random_questions(seed, difficulty_counts, topics)
-        tex_content = render_random_exam_tex(title, seed, questions)
+        generated_variants = generate_random_variants(
+            seed,
+            variant_count,
+            difficulty_counts=difficulty_counts,
+            topics=topics,
+            blueprint=blueprint,
+        )
     except ValueError as exc:
         return jsonify({'success': False, 'message': str(exc)}), 400
 
+    variants = [
+        serialize_random_variant(
+            item['seed'],
+            item['questions'],
+            item['overlap_ratio'],
+        )
+        for item in generated_variants
+    ]
+    rendered_variants = [{
+        'seed': item['seed'],
+        'content': render_random_exam_tex(title, item['seed'], item['questions'])
+    } for item in generated_variants]
+    tex_content = combine_random_exam_tex(rendered_variants)
+
+    draft = {
+        'title': title,
+        'base_seed': seed,
+        'difficulty_counts': difficulty_counts,
+        'topics': topics,
+        'blueprint': blueprint,
+        'use_matrix': use_matrix,
+        'variants': variants,
+        'bank_exam_id': None,
+        'quality_report': {
+            'status': 'passed',
+            'message': 'Đã kiểm tra cấu trúc, đáp án và độ trùng giữa các mã đề.'
+        },
+    }
     store_current_exam_tex(tex_content)
+    store_random_exam_draft(draft)
     topic_counts = {}
-    for question in questions:
+    for question in generated_variants[0]['questions']:
         topic_counts[question.topic] = topic_counts.get(question.topic, 0) + 1
 
     return jsonify({
         'success': True,
-        'seed': seed,
-        'total_questions': len(questions),
+        'seed': variants[0]['seed'],
+        'base_seed': seed,
+        'revision': 0,
+        'total_questions': total_questions,
+        'total_variants': len(variants),
         'difficulty_counts': difficulty_counts,
+        'quality_report': draft['quality_report'],
         'topic_counts': [{
             'topic': topic,
             'label': RANDOM_EXAM_TOPIC_LABELS[topic],
             'count': count
         } for topic, count in topic_counts.items()],
-        'questions': [
-            question.to_dict(index)
-            for index, question in enumerate(questions, start=1)
-        ]
+        'questions': variants[0]['questions'],
+        'variants': variants,
+    })
+
+
+def rebuild_random_exam_draft(draft):
+    rendered_variants = []
+    for variant in get_random_draft_variants(draft):
+        questions = [generated_question_from_dict(item) for item in variant.get('questions', [])]
+        rendered_variants.append({
+            'seed': variant.get('seed', 1),
+            'content': render_random_exam_tex(
+                draft.get('title') or 'Đề thi Giải tích I',
+                variant.get('seed', 1),
+                questions,
+            )
+        })
+    tex_content = combine_random_exam_tex(rendered_variants)
+    store_current_exam_tex(tex_content)
+    store_random_exam_draft(draft)
+    return tex_content, rendered_variants
+
+
+@app.route(
+    '/api/generate-exam/questions/<int:question_index>/lock',
+    defaults={'variant_index': 0},
+    methods=['PUT']
+)
+@app.route(
+    '/api/generate-exam/variants/<int:variant_index>/questions/<int:question_index>/lock',
+    methods=['PUT']
+)
+@role_required('teacher')
+def api_lock_random_exam_question(question_index, variant_index):
+    draft = load_random_exam_draft()
+    variants = get_random_draft_variants(draft)
+    if variant_index < 0 or variant_index >= len(variants):
+        return jsonify({'success': False, 'message': 'Không tìm thấy mã đề trong bản nháp.'}), 404
+    questions = variants[variant_index].get('questions', [])
+    if question_index < 0 or question_index >= len(questions):
+        return jsonify({'success': False, 'message': 'Không tìm thấy câu hỏi trong bản nháp.'}), 404
+
+    locked = parse_bool((request.get_json() or {}).get('locked'), default=True)
+    questions[question_index]['locked'] = locked
+    store_random_exam_draft(draft)
+    return jsonify({
+        'success': True,
+        'variant_index': variant_index,
+        'question_index': question_index,
+        'locked': locked,
+        'message': 'Đã khóa câu hỏi.' if locked else 'Đã mở khóa câu hỏi.'
+    })
+
+
+@app.route(
+    '/api/generate-exam/questions/<int:question_index>/regenerate',
+    defaults={'variant_index': 0},
+    methods=['POST']
+)
+@app.route(
+    '/api/generate-exam/variants/<int:variant_index>/questions/<int:question_index>/regenerate',
+    methods=['POST']
+)
+@role_required('teacher')
+def api_regenerate_random_exam_question(question_index, variant_index):
+    draft = load_random_exam_draft()
+    variants = get_random_draft_variants(draft)
+    if variant_index < 0 or variant_index >= len(variants):
+        return jsonify({'success': False, 'message': 'Không tìm thấy mã đề trong bản nháp.'}), 404
+    variant = variants[variant_index]
+    questions = variant.get('questions', [])
+    if question_index < 0 or question_index >= len(questions):
+        return jsonify({'success': False, 'message': 'Không tìm thấy câu hỏi trong bản nháp.'}), 404
+    if questions[question_index].get('locked'):
+        return jsonify({'success': False, 'message': 'Câu hỏi đang được khóa. Hãy mở khóa trước khi sinh lại.'}), 409
+
+    current_question = generated_question_from_dict(questions[question_index])
+    revision = int(variant.get('revision') or 0) + 1
+    replacement_seed = (
+        int(variant.get('seed') or 1)
+        + revision * 1000003
+        + (question_index + 1) * 9176
+    )
+    excluded = {
+        item.get('fingerprint')
+        for item in questions
+        if item.get('fingerprint')
+    }
+    correct_position = ord(current_question.correct_letter) - 65
+    try:
+        replacement = generate_replacement_question(
+            replacement_seed,
+            current_question.topic,
+            current_question.difficulty,
+            correct_position,
+            excluded,
+        )
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+    replacement_payload = replacement.to_dict(question_index + 1)
+    replacement_payload.update({
+        'locked': False,
+        'manually_edited': False,
+        'original_auto': None,
+    })
+    questions[question_index] = replacement_payload
+    variant['revision'] = revision
+    draft['bank_exam_id'] = None
+    rebuild_random_exam_draft(draft)
+    return jsonify({
+        'success': True,
+        'variant_index': variant_index,
+        'revision': revision,
+        'question': replacement_payload,
+        'message': f'Đã sinh lại câu {question_index + 1}.'
+    })
+
+
+@app.route(
+    '/api/generate-exam/variants/<int:variant_index>/questions/<int:question_index>',
+    methods=['PUT']
+)
+@role_required('teacher')
+def api_edit_random_exam_question(variant_index, question_index):
+    draft = load_random_exam_draft()
+    variants = get_random_draft_variants(draft)
+    if variant_index < 0 or variant_index >= len(variants):
+        return jsonify({'success': False, 'message': 'Không tìm thấy mã đề trong bản nháp.'}), 404
+    questions = variants[variant_index].get('questions', [])
+    if question_index < 0 or question_index >= len(questions):
+        return jsonify({'success': False, 'message': 'Không tìm thấy câu hỏi trong bản nháp.'}), 404
+    if questions[question_index].get('locked'):
+        return jsonify({'success': False, 'message': 'Hãy mở khóa câu hỏi trước khi chỉnh sửa.'}), 409
+
+    data = request.get_json() or {}
+    raw_choices = data.get('choices')
+    if not isinstance(raw_choices, list) or len(raw_choices) != 4:
+        return jsonify({'success': False, 'message': 'Câu hỏi phải có đúng bốn phương án.'}), 400
+    choices = tuple(
+        GeneratedChoice(
+            tex=str(item.get('tex') or '').strip(),
+            is_correct=bool(item.get('is_correct')),
+            is_math=bool(item.get('is_math', True)),
+        )
+        for item in raw_choices
+        if isinstance(item, dict)
+    )
+    current = questions[question_index]
+    fingerprint_source = json.dumps({
+        'prompt': data.get('prompt_tex'),
+        'choices': raw_choices,
+        'solution': data.get('solution_tex'),
+    }, ensure_ascii=False, sort_keys=True)
+    edited = GeneratedQuestion(
+        topic=current.get('topic'),
+        difficulty=current.get('difficulty'),
+        prompt_tex=str(data.get('prompt_tex') or '').strip(),
+        choices=choices,
+        solution_tex=str(data.get('solution_tex') or '').strip(),
+        fingerprint='manual-' + hashlib.sha256(fingerprint_source.encode('utf-8')).hexdigest()[:16],
+    )
+    try:
+        validate_generated_question(edited)
+    except ValueError as exc:
+        return jsonify({'success': False, 'message': str(exc)}), 400
+
+    original_auto = current.get('original_auto')
+    if not original_auto:
+        original_auto = json.loads(json.dumps(current, ensure_ascii=False))
+        original_auto.pop('original_auto', None)
+    payload = edited.to_dict(question_index + 1)
+    payload.update({
+        'locked': False,
+        'manually_edited': True,
+        'original_auto': original_auto,
+    })
+    questions[question_index] = payload
+    variants[variant_index]['revision'] = int(variants[variant_index].get('revision') or 0) + 1
+    draft['bank_exam_id'] = None
+    rebuild_random_exam_draft(draft)
+    return jsonify({
+        'success': True,
+        'variant_index': variant_index,
+        'question': payload,
+        'revision': variants[variant_index]['revision'],
+        'message': f'Đã cập nhật câu {question_index + 1}.'
+    })
+
+
+@app.route(
+    '/api/generate-exam/variants/<int:variant_index>/questions/<int:question_index>/reset',
+    methods=['POST']
+)
+@role_required('teacher')
+def api_reset_random_exam_question(variant_index, question_index):
+    draft = load_random_exam_draft()
+    variants = get_random_draft_variants(draft)
+    if variant_index < 0 or variant_index >= len(variants):
+        return jsonify({'success': False, 'message': 'Không tìm thấy mã đề trong bản nháp.'}), 404
+    questions = variants[variant_index].get('questions', [])
+    if question_index < 0 or question_index >= len(questions):
+        return jsonify({'success': False, 'message': 'Không tìm thấy câu hỏi trong bản nháp.'}), 404
+    original = questions[question_index].get('original_auto')
+    if not isinstance(original, dict):
+        return jsonify({'success': False, 'message': 'Câu hỏi chưa có bản tự động để khôi phục.'}), 409
+
+    restored = json.loads(json.dumps(original, ensure_ascii=False))
+    restored.update({
+        'number': question_index + 1,
+        'locked': False,
+        'manually_edited': False,
+        'original_auto': None,
+    })
+    generated_question_from_dict(restored)
+    questions[question_index] = restored
+    variants[variant_index]['revision'] = int(variants[variant_index].get('revision') or 0) + 1
+    draft['bank_exam_id'] = None
+    rebuild_random_exam_draft(draft)
+    return jsonify({
+        'success': True,
+        'variant_index': variant_index,
+        'question': restored,
+        'revision': variants[variant_index]['revision'],
+        'message': f'Đã khôi phục câu {question_index + 1}.'
+    })
+
+
+def evaluate_random_exam_draft(draft):
+    issues = []
+    variants = get_random_draft_variants(draft)
+    expected_count = None
+    fingerprint_sets = []
+    for variant_index, variant in enumerate(variants):
+        questions = variant.get('questions', [])
+        if expected_count is None:
+            expected_count = len(questions)
+        elif len(questions) != expected_count:
+            issues.append(f'Mã đề {variant_index + 1} không có cùng số câu với mã đầu tiên.')
+
+        fingerprints = []
+        for question_index, item in enumerate(questions):
+            try:
+                validate_generated_question(generated_question_from_dict(item))
+            except ValueError as exc:
+                issues.append(f'Mã {variant_index + 1}, câu {question_index + 1}: {exc}')
+            fingerprints.append(item.get('fingerprint'))
+        if len(fingerprints) != len(set(fingerprints)):
+            issues.append(f'Mã đề {variant_index + 1} có câu hỏi bị trùng.')
+        fingerprint_sets.append(set(fingerprints))
+
+    for left_index in range(len(fingerprint_sets)):
+        for right_index in range(left_index + 1, len(fingerprint_sets)):
+            overlap = len(fingerprint_sets[left_index] & fingerprint_sets[right_index])
+            ratio = overlap / max(len(fingerprint_sets[left_index]), 1)
+            if ratio > 0.25:
+                issues.append(
+                    f'Mã đề {left_index + 1} và {right_index + 1} trùng '
+                    f'{round(ratio * 100)}% số câu.'
+                )
+
+    tex_content, rendered_variants = rebuild_random_exam_draft(draft)
+    for variant_index, rendered in enumerate(rendered_variants):
+        parsed_questions, answer_key = parse_assignment_questions(rendered['content'])
+        if len(parsed_questions) != expected_count or len(answer_key) != expected_count:
+            issues.append(f'Không tách được đầy đủ câu hỏi của mã đề {variant_index + 1}.')
+
+    if not issues and app.config.get('PDF_QUALITY_GATE', True):
+        _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+        if compile_error:
+            issues.append('PDF không biên dịch được: ' + compile_error)
+
+    return {
+        'status': 'failed' if issues else 'passed',
+        'issues': issues,
+        'message': (
+            f'Phát hiện {len(issues)} vấn đề cần sửa trước khi thêm vào ngân hàng.'
+            if issues else
+            'Đã kiểm tra cấu trúc, đáp án, độ trùng và khả năng xuất PDF.'
+        ),
+        'tex_content': tex_content,
+        'rendered_variants': rendered_variants,
+    }
+
+
+@app.route('/api/generate-exam/finalize', methods=['POST'])
+@role_required('teacher')
+def api_finalize_random_exam():
+    draft = load_random_exam_draft()
+    variants = get_random_draft_variants(draft)
+    if not draft or not variants:
+        return jsonify({'success': False, 'message': 'Chưa có đề ngẫu nhiên để thêm.'}), 404
+
+    existing_id = draft.get('bank_exam_id')
+    if existing_id:
+        existing = ExamBank.query.filter_by(id=existing_id, teacher_id=current_user.id).first()
+        if existing:
+            return jsonify({
+                'success': True,
+                'message': 'Đề này đã nằm trong ngân hàng.',
+                'bank_exam': serialize_exam_bank_item(existing)
+            })
+
+    quality_report = evaluate_random_exam_draft(draft)
+    draft['quality_report'] = {
+        'status': quality_report['status'],
+        'message': quality_report['message'],
+        'issues': quality_report['issues'],
+    }
+    store_random_exam_draft(draft)
+    if quality_report['status'] != 'passed':
+        return jsonify({
+            'success': False,
+            'message': quality_report['message'],
+            'quality_report': draft['quality_report'],
+        }), 400
+
+    tex_content = quality_report['tex_content']
+    rendered_variants = quality_report['rendered_variants']
+    topic_names = []
+    for variant in variants:
+        for item in variant.get('questions', []):
+            label = RANDOM_EXAM_TOPIC_LABELS.get(item.get('topic'), item.get('topic') or '')
+            if label and label not in topic_names:
+                topic_names.append(label)
+    total_revisions = sum(int(item.get('revision') or 0) for item in variants)
+    bank_item = ExamBank(
+        teacher_id=current_user.id,
+        title=str(draft.get('title') or 'Đề thi ngẫu nhiên'),
+        topic=', '.join(topic_names),
+        description=(
+            f'Đề sinh ngẫu nhiên từ seed {draft.get("base_seed", variants[0].get("seed"))}. '
+            f'Số mã đề: {len(variants)}. Số lần chỉnh câu: {total_revisions}.'
+        ),
+        variants_json=json.dumps(rendered_variants, ensure_ascii=False),
+        combined_tex=tex_content,
+        total_variants=len(variants),
+        total_questions=len(variants[0].get('questions', []))
+    )
+    db.session.add(bank_item)
+    db.session.commit()
+    draft['bank_exam_id'] = bank_item.id
+    store_random_exam_draft(draft)
+    return jsonify({
+        'success': True,
+        'message': 'Đã thêm đề ngẫu nhiên vào ngân hàng đề thi.',
+        'bank_exam': serialize_exam_bank_item(bank_item),
+        'quality_report': draft['quality_report'],
     })
 
 @app.route('/download/tex')
@@ -2594,6 +3486,41 @@ def download_tex():
         return redirect(url_for('teacher_dashboard'))
     
     return Response(tex_content, mimetype="text/plain", headers={"Content-disposition": "attachment; filename=De_Thi_Giai_Tich.tex"})
+
+
+def compile_tex_pdf_bytes(tex_content, timeout_seconds=60):
+    import shutil
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        tex_file_path = os.path.join(tempdir, 'exam.tex')
+        pdf_file_path = os.path.join(tempdir, 'exam.pdf')
+        with open(tex_file_path, 'w', encoding='utf-8') as output_file:
+            output_file.write(tex_content)
+
+        cls_path_source = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'fami-exam.cls')
+        if os.path.exists(cls_path_source):
+            shutil.copy(cls_path_source, tempdir)
+
+        try:
+            process = subprocess.run(
+                ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', 'exam.tex'],
+                cwd=tempdir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired:
+            return None, f'Biên dịch PDF vượt quá {timeout_seconds} giây.'
+        except OSError as exc:
+            return None, f'Không thể gọi pdflatex: {exc}'
+
+        if process.returncode != 0 or not os.path.exists(pdf_file_path):
+            log_lines = (process.stdout or '').splitlines()
+            return None, '\n'.join(log_lines[-12:]) or 'pdflatex không tạo được file PDF.'
+        with open(pdf_file_path, 'rb') as pdf_file:
+            return pdf_file.read(), None
+
 
 @app.route('/download/pdf')
 @login_required
@@ -4368,7 +5295,7 @@ def api_check_questions_ai():
     results = []
     totals = {'ok': 0, 'warning': 0, 'error': 0}
 
-    for item in questions[:100]:
+    for item in questions:
         question_content = str(item.get('content', '')).strip()
         if not question_content:
             review = {
@@ -4409,6 +5336,7 @@ def api_check_questions_ai():
         'mode': 'rule'
     })
 
+
 # API: Lưu kết quả đã sinh vào session để xuất PDF/TEX
 @app.route('/api/custom-exam/generate-bulk', methods=['POST'])
 @login_required
@@ -4437,7 +5365,7 @@ def custom_exam_generate_bulk():
         })
 
     if not variants:
-        return jsonify({'success': False, 'message': 'Không có nội dung đề hợp lệ để chốt.'})
+        return jsonify({'success': False, 'message': 'Không có nội dung đề hợp lệ để thêm.'})
 
     tex_content = ""
     preamble = ""
@@ -4483,12 +5411,47 @@ def custom_exam_generate_bulk():
         parsed_questions, _ = parse_assignment_questions(variants[0]['content'])
         total_questions = len(parsed_questions)
 
+    quality_issues = []
+    if total_questions == 0:
+        quality_issues.append('Không tách được câu hỏi trắc nghiệm từ mã đề đầu tiên.')
+    for variant_index, variant in enumerate(variants):
+        parsed_questions, answer_key = parse_assignment_questions(variant['content'])
+        if len(parsed_questions) != total_questions or len(answer_key) != total_questions:
+            quality_issues.append(
+                f'Mã đề {variant_index + 1} không có cùng số câu hoặc thiếu đáp án đúng.'
+            )
+        question_blocks = re.findall(
+            r'\\begin\{question\}[\s\S]*?\\end\{question\}',
+            variant['content'],
+        )
+        for question_index, block in enumerate(question_blocks):
+            review = review_question_content(block)
+            if review.get('status') == 'error':
+                quality_issues.append(
+                    f'Mã {variant_index + 1}, câu {question_index + 1}: {review.get("summary")}'
+                )
+
+    if not quality_issues and app.config.get('PDF_QUALITY_GATE', True):
+        _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+        if compile_error:
+            quality_issues.append('PDF không biên dịch được: ' + compile_error)
+
+    if quality_issues:
+        return jsonify({
+            'success': False,
+            'message': 'Đề chưa vượt qua bước kiểm tra chất lượng.',
+            'quality_report': {
+                'status': 'failed',
+                'issues': quality_issues,
+            }
+        }), 400
+
     bank_item = ExamBank(
         teacher_id=current_user.id,
         title=title,
         topic=topic,
         week_number=week_number,
-        description=f'Lưu tự động khi chốt đề. Số mã đề: {len(variants)}.',
+        description=f'Lưu tự động khi thêm đề. Số mã đề: {len(variants)}.',
         variants_json=json.dumps(variants, ensure_ascii=False),
         combined_tex=tex_content,
         total_variants=len(variants),
@@ -4501,7 +5464,11 @@ def custom_exam_generate_bulk():
     return jsonify({
         'success': True,
         'bank_exam': serialize_exam_bank_item(bank_item),
-        'message': 'Đã chốt đề và lưu vào ngân hàng đề thi.'
+        'quality_report': {
+            'status': 'passed',
+            'issues': [],
+        },
+        'message': 'Đã chọn đề và lưu vào ngân hàng đề thi.'
     })
 
 # API: Tải file mẫu (.cls, .tex)

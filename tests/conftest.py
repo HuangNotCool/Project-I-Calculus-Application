@@ -25,7 +25,8 @@ def app():
     app_module.app.config.update(
         TESTING=True,
         SQLALCHEMY_DATABASE_URI='sqlite:///pytest.db',
-        CURRENT_EXAM_DIR=str(TEST_CURRENT_EXAM_DIR)
+        CURRENT_EXAM_DIR=str(TEST_CURRENT_EXAM_DIR),
+        PDF_QUALITY_GATE=False
     )
     app_module._rate_limit_events.clear()
     with app_module.app.app_context():
