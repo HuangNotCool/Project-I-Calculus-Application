@@ -20,6 +20,7 @@ from sqlalchemy.exc import IntegrityError
 from functools import wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import sys
 import sympy as sp
 from sympy.parsing.sympy_parser import (
     convert_xor,
@@ -30,6 +31,7 @@ from sympy.parsing.sympy_parser import (
 import random
 import os
 import subprocess
+import shutil
 import tempfile
 import io
 import re
@@ -45,24 +47,38 @@ import json
 from datetime import datetime, timedelta, timezone
 
 
-BASE_DIR = Path(__file__).resolve().parent
-INSTANCE_DIR = BASE_DIR / 'instance'
-INSTANCE_DIR.mkdir(exist_ok=True)
+SOURCE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(getattr(sys, '_MEIPASS', SOURCE_DIR)).resolve()
+
+
+def get_application_data_dir():
+    configured = os.getenv('GIAITICH_APP_DATA_DIR', '').strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    if getattr(sys, 'frozen', False):
+        local_app_data = os.getenv('LOCALAPPDATA', '').strip()
+        root = Path(local_app_data) if local_app_data else (Path.home() / 'AppData' / 'Local')
+        return (root / 'GiaiTichHUST').resolve()
+    return (SOURCE_DIR / 'instance').resolve()
+
+
+INSTANCE_DIR = get_application_data_dir()
+INSTANCE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def load_local_env():
-    env_path = BASE_DIR / '.env'
-    if not env_path.exists():
-        return
-    for raw_line in env_path.read_text(encoding='utf-8').splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith('#') or '=' not in line:
+    for env_path in (INSTANCE_DIR / '.env', BASE_DIR / '.env'):
+        if not env_path.exists():
             continue
-        key, value = line.split('=', 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key:
-            os.environ.setdefault(key, value)
+        for raw_line in env_path.read_text(encoding='utf-8').splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key:
+                os.environ.setdefault(key, value)
 
 
 def get_secret_key():
@@ -78,7 +94,12 @@ def get_secret_key():
 
 
 load_local_env()
-app = Flask(__name__)
+app = Flask(
+    __name__,
+    template_folder=str(BASE_DIR / 'templates'),
+    static_folder=str(BASE_DIR / 'static'),
+    instance_path=str(INSTANCE_DIR),
+)
 app.config['SECRET_KEY'] = get_secret_key()
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///database.db')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -92,6 +113,9 @@ app.config['ATTEMPT_SWEEP_INTERVAL_SECONDS'] = max(
 )
 app.config['PDF_QUALITY_GATE'] = os.getenv('PDF_QUALITY_GATE', '1') == '1'
 
+DEFAULT_ADMIN_USERNAME = 'admin'
+DEFAULT_ADMIN_PASSWORD = 'hustoneloveonefuture'
+
 
 def app_now():
     try:
@@ -101,7 +125,7 @@ def app_now():
     return datetime.now(configured_timezone).replace(tzinfo=None)
 
 db.init_app(app)
-migrate = Migrate(app, db, compare_type=True)
+migrate = Migrate(app, db, compare_type=True, directory=str(BASE_DIR / 'migrations'))
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -157,8 +181,11 @@ def enforce_request_security():
         '/api/generate-exam'
     )
     student_prefixes = ('/api/student/',)
+    admin_prefixes = ('/api/admin/',)
     required_role = None
-    if request.path.startswith(teacher_prefixes):
+    if request.path.startswith(admin_prefixes):
+        required_role = 'admin'
+    elif request.path.startswith(teacher_prefixes):
         required_role = 'teacher'
     elif request.path.startswith(student_prefixes):
         required_role = 'student'
@@ -1770,7 +1797,11 @@ def validate_student_profile(student_code, school_name, major):
 
 
 def dashboard_url_for(user):
-    return url_for('teacher_dashboard' if user.role == 'teacher' else 'student_dashboard')
+    if user.role == 'admin':
+        return url_for('admin_dashboard')
+    if user.role == 'teacher':
+        return url_for('teacher_dashboard')
+    return url_for('student_dashboard')
 
 
 def safe_next_url(target):
@@ -2488,6 +2519,36 @@ def backfill_attempt_results():
         db.session.commit()
 
 
+def ensure_system_admin():
+    existing = User.query.filter(
+        func.lower(User.username) == DEFAULT_ADMIN_USERNAME
+    ).first()
+    if existing:
+        if existing.role != 'admin':
+            raise RuntimeError(
+                f'Khong the tao admin mac dinh: username "{DEFAULT_ADMIN_USERNAME}" '
+                f'da thuoc tai khoan {existing.role}.'
+            )
+        if existing.approval_status != 'approved':
+            existing.approval_status = 'approved'
+            db.session.commit()
+        return existing
+
+    admin = User(
+        username=DEFAULT_ADMIN_USERNAME,
+        full_name='Quản trị hệ thống',
+        password=generate_password_hash(DEFAULT_ADMIN_PASSWORD),
+        role='admin',
+        approval_status='approved',
+    )
+    db.session.add(admin)
+    db.session.commit()
+    app.logger.warning(
+        'Da tao tai khoan admin mac dinh. Hay doi mat khau ngay sau lan dang nhap dau tien.'
+    )
+    return admin
+
+
 def bootstrap_application_data():
     with app.app_context():
         table_names = set(inspect(db.engine).get_table_names())
@@ -2503,6 +2564,7 @@ def bootstrap_application_data():
             upgrade()
         else:
             upgrade()
+        ensure_system_admin()
         backfill_assignment_policies()
         backfill_assignment_versions()
         backfill_attempt_results()
@@ -2597,7 +2659,8 @@ def create_teacher_command(username, full_name, password):
         username=username,
         full_name=full_name,
         password=generate_password_hash(password),
-        role='teacher'
+        role='teacher',
+        approval_status='approved',
     ))
     db.session.commit()
     click.echo(f'Đã tạo tài khoản giáo viên: {username}')
@@ -2614,6 +2677,23 @@ def api_security_csrf_token():
     return jsonify({'success': True, 'csrf_token': get_csrf_token()})
 
 
+@app.route('/api/system/latex-status')
+@login_required
+def api_system_latex_status():
+    command = get_pdflatex_command()
+    return jsonify({
+        'success': True,
+        'available': bool(command),
+        'engine': Path(command).name if command else None,
+        'download_url': 'https://miktex.org/download',
+        'message': (
+            'MiKTeX/pdflatex đã sẵn sàng để xuất PDF.'
+            if command else
+            'Chưa tìm thấy MiKTeX/pdflatex. Bạn vẫn có thể xuất file TEX.'
+        ),
+    })
+
+
 @app.route('/register', methods=['GET', 'POST'])
 @rate_limit(5, 300, 'register')
 def register():
@@ -2621,6 +2701,7 @@ def register():
         return redirect(dashboard_url_for(current_user))
 
     form_data = {
+        'role': 'student',
         'full_name': '',
         'username': '',
         'student_code': '',
@@ -2628,6 +2709,7 @@ def register():
         'major': ''
     }
     if request.method == 'POST':
+        requested_role = str(request.form.get('role') or 'student').strip().lower()
         full_name = normalize_full_name(request.form.get('full_name'))
         username = normalize_username(request.form.get('username'))
         password = str(request.form.get('password') or '')
@@ -2636,6 +2718,7 @@ def register():
         school_name = str(request.form.get('school_name') or '').strip()
         major = str(request.form.get('major') or '').strip()
         form_data.update({
+            'role': requested_role,
             'full_name': full_name,
             'username': username,
             'student_code': student_code,
@@ -2643,12 +2726,16 @@ def register():
             'major': major
         })
 
+        if requested_role not in {'student', 'teacher'}:
+            flash('Loại tài khoản đăng ký không hợp lệ.', 'danger')
+            return render_template('register.html', form_data=form_data), 400
         validation_error = (
             validate_full_name(full_name)
             or validate_username(username)
             or validate_password(password)
-            or validate_student_profile(student_code, school_name, major)
         )
+        if not validation_error and requested_role == 'student':
+            validation_error = validate_student_profile(student_code, school_name, major)
         if validation_error:
             flash(validation_error, 'danger')
             return render_template('register.html', form_data=form_data), 400
@@ -2659,7 +2746,7 @@ def register():
         if User.query.filter(func.lower(User.username) == username).first():
             flash('Tên đăng nhập đã tồn tại.', 'danger')
             return render_template('register.html', form_data=form_data), 409
-        if User.query.filter_by(student_code=student_code).first():
+        if requested_role == 'student' and User.query.filter_by(student_code=student_code).first():
             flash('Mã số sinh viên đã được sử dụng.', 'danger')
             return render_template('register.html', form_data=form_data), 409
 
@@ -2667,22 +2754,27 @@ def register():
             username=username,
             full_name=full_name,
             password=generate_password_hash(password),
-            role='student',
-            student_code=student_code,
-            school_name=school_name,
-            major=major
+            role=requested_role,
+            approval_status='pending' if requested_role == 'teacher' else 'approved',
+            student_code=student_code if requested_role == 'student' else None,
+            school_name=school_name if requested_role == 'student' else None,
+            major=major if requested_role == 'student' else None,
         )
         try:
             db.session.add(new_user)
             db.session.flush()
-            award_student_badges(new_user, notify=False)
+            if requested_role == 'student':
+                award_student_badges(new_user, notify=False)
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
             flash('Tên đăng nhập hoặc mã số sinh viên đã tồn tại.', 'danger')
             return render_template('register.html', form_data=form_data), 409
 
-        flash('Đăng ký thành công! Vui lòng đăng nhập.', 'success')
+        if requested_role == 'teacher':
+            flash('Đã gửi đăng ký giảng viên. Bạn có thể đăng nhập sau khi quản trị viên phê duyệt.', 'info')
+        else:
+            flash('Đăng ký thành công! Vui lòng đăng nhập.', 'success')
         return redirect(url_for('login'))
 
     return render_template('register.html', form_data=form_data)
@@ -2692,13 +2784,18 @@ def register():
 def login():
     if current_user.is_authenticated:
         return redirect(dashboard_url_for(current_user))
-
     if request.method == 'POST':
         username = normalize_username(request.form.get('username'))
         password = str(request.form.get('password') or '')
         user = User.query.filter(func.lower(User.username) == username).first()
         
         if user and check_password_hash(user.password, password):
+            if user.role == 'teacher' and user.approval_status != 'approved':
+                if user.approval_status == 'rejected':
+                    flash('Đăng ký giảng viên đã bị từ chối. Vui lòng liên hệ quản trị viên.', 'danger')
+                else:
+                    flash('Tài khoản giảng viên đang chờ quản trị viên phê duyệt.', 'warning')
+                return redirect(url_for('login'))
             next_url = safe_next_url(request.args.get('next'))
             session.clear()
             login_user(user)
@@ -2716,6 +2813,55 @@ def logout():
     session.clear()
     return redirect(url_for('home'))
 
+
+@app.route('/admin-dashboard')
+@role_required('admin')
+def admin_dashboard():
+    teachers = (
+        User.query
+        .filter_by(role='teacher')
+        .order_by(User.id.desc())
+        .all()
+    )
+    grouped_teachers = {
+        status: [teacher for teacher in teachers if teacher.approval_status == status]
+        for status in ('pending', 'approved', 'rejected')
+    }
+    return render_template(
+        'admin_dashboard.html',
+        grouped_teachers=grouped_teachers,
+        uses_default_password=check_password_hash(
+            current_user.password,
+            DEFAULT_ADMIN_PASSWORD,
+        ),
+    )
+
+
+@app.route('/admin/teachers/<int:user_id>/<action>', methods=['POST'])
+@role_required('admin')
+def review_teacher_registration(user_id, action):
+    teacher = db.get_or_404(User, user_id)
+    if teacher.role != 'teacher' or action not in {'approve', 'reject'}:
+        abort(404)
+
+    teacher.approval_status = 'approved' if action == 'approve' else 'rejected'
+    if action == 'approve':
+        create_notification(
+            teacher.id,
+            'Tài khoản giảng viên đã được duyệt',
+            'Bạn có thể sử dụng đầy đủ các chức năng dành cho giảng viên.',
+            category='success',
+            link='/teacher-dashboard',
+            dedupe_key=f'teacher-approved-{teacher.id}',
+        )
+    db.session.commit()
+    flash(
+        f'Đã {"phê duyệt" if action == "approve" else "từ chối"} tài khoản {teacher.display_name}.',
+        'success' if action == 'approve' else 'warning',
+    )
+    return redirect(url_for('admin_dashboard'))
+
+
 @app.route('/profile')
 @login_required
 def profile():
@@ -2730,7 +2876,11 @@ def profile():
 @rate_limit(10, 300, 'profile-update')
 def update_profile():
     full_name = normalize_full_name(request.form.get('full_name'))
-    username = normalize_username(request.form.get('username'))
+    username = (
+        current_user.username
+        if current_user.role == 'admin'
+        else normalize_username(request.form.get('username'))
+    )
     validation_error = validate_full_name(full_name) or validate_username(username)
     if validation_error:
         flash(validation_error, 'danger')
@@ -2822,7 +2972,7 @@ def change_password():
 def teacher_dashboard():
     if current_user.role != 'teacher':
         flash('Bạn không có quyền truy cập trang này!', 'danger')
-        return redirect(url_for('student_dashboard'))
+        return redirect(dashboard_url_for(current_user))
     
     # Lấy toàn bộ lớp học do giáo viên này tạo từ CSDL
     my_classes = Class.query.filter_by(teacher_id=current_user.id).all()
@@ -2844,6 +2994,8 @@ def teacher_class_detail(class_id):
 @app.route('/calendar')
 @login_required
 def learning_calendar():
+    if current_user.role == 'admin':
+        return redirect(url_for('admin_dashboard'))
     if current_user.role == 'student':
         ensure_due_notifications(current_user)
         db.session.commit()
@@ -2860,7 +3012,7 @@ def learning_calendar():
 @login_required
 def student_dashboard():
     if current_user.role != 'student':
-        return redirect(url_for('teacher_dashboard'))
+        return redirect(dashboard_url_for(current_user))
     
     # Lấy danh sách các lớp học mà học sinh này đã tham gia (nhờ relationship enrolled_classes trong models)
     my_classes = current_user.enrolled_classes
@@ -3394,19 +3546,29 @@ def evaluate_random_exam_draft(draft):
         if len(parsed_questions) != expected_count or len(answer_key) != expected_count:
             issues.append(f'Không tách được đầy đủ câu hỏi của mã đề {variant_index + 1}.')
 
+    pdf_status = 'disabled'
     if not issues and app.config.get('PDF_QUALITY_GATE', True):
-        _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
-        if compile_error:
-            issues.append('PDF không biên dịch được: ' + compile_error)
+        if get_pdflatex_command():
+            pdf_status = 'passed'
+            _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+            if compile_error:
+                pdf_status = 'failed'
+                issues.append('PDF không biên dịch được: ' + compile_error)
+        else:
+            pdf_status = 'skipped'
 
     return {
         'status': 'failed' if issues else 'passed',
         'issues': issues,
         'message': (
             f'Phát hiện {len(issues)} vấn đề cần sửa trước khi thêm vào ngân hàng.'
-            if issues else
-            'Đã kiểm tra cấu trúc, đáp án, độ trùng và khả năng xuất PDF.'
+            if issues else (
+                'Đã kiểm tra cấu trúc, đáp án và độ trùng. Kiểm tra PDF được bỏ qua vì chưa cài MiKTeX.'
+                if pdf_status == 'skipped' else
+                'Đã kiểm tra cấu trúc, đáp án, độ trùng và khả năng xuất PDF.'
+            )
         ),
+        'pdf_status': pdf_status,
         'tex_content': tex_content,
         'rendered_variants': rendered_variants,
     }
@@ -3435,6 +3597,7 @@ def api_finalize_random_exam():
         'status': quality_report['status'],
         'message': quality_report['message'],
         'issues': quality_report['issues'],
+        'pdf_status': quality_report.get('pdf_status'),
     }
     store_random_exam_draft(draft)
     if quality_report['status'] != 'passed':
@@ -3488,22 +3651,53 @@ def download_tex():
     return Response(tex_content, mimetype="text/plain", headers={"Content-disposition": "attachment; filename=De_Thi_Giai_Tich.tex"})
 
 
-def compile_tex_pdf_bytes(tex_content, timeout_seconds=60):
-    import shutil
+def get_pdflatex_command():
+    configured = os.getenv('LATEX_ENGINE', 'pdflatex').strip() or 'pdflatex'
+    configured_path = Path(configured).expanduser()
+    if configured_path.is_file():
+        return str(configured_path.resolve())
+    discovered = shutil.which(configured)
+    if discovered:
+        return discovered
 
+    candidate_roots = [
+        os.getenv('LOCALAPPDATA', ''),
+        os.getenv('ProgramFiles', ''),
+        os.getenv('ProgramFiles(x86)', ''),
+    ]
+    relative_candidates = (
+        Path('Programs/MiKTeX/miktex/bin/x64/pdflatex.exe'),
+        Path('MiKTeX/miktex/bin/x64/pdflatex.exe'),
+        Path('MiKTeX 2.9/miktex/bin/x64/pdflatex.exe'),
+    )
+    for root in candidate_roots:
+        if not root:
+            continue
+        for relative_path in relative_candidates:
+            candidate = Path(root) / relative_path
+            if candidate.is_file():
+                return str(candidate.resolve())
+    return None
+
+
+def compile_tex_pdf_bytes(tex_content, timeout_seconds=60):
     with tempfile.TemporaryDirectory() as tempdir:
         tex_file_path = os.path.join(tempdir, 'exam.tex')
         pdf_file_path = os.path.join(tempdir, 'exam.pdf')
         with open(tex_file_path, 'w', encoding='utf-8') as output_file:
             output_file.write(tex_content)
 
-        cls_path_source = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'fami-exam.cls')
+        cls_path_source = str(BASE_DIR / 'fami-exam.cls')
         if os.path.exists(cls_path_source):
             shutil.copy(cls_path_source, tempdir)
 
+        pdflatex_command = get_pdflatex_command()
+        if not pdflatex_command:
+            return None, 'Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE.'
+
         try:
             process = subprocess.run(
-                ['pdflatex', '-interaction=nonstopmode', '-halt-on-error', 'exam.tex'],
+                [pdflatex_command, '-interaction=nonstopmode', '-halt-on-error', 'exam.tex'],
                 cwd=tempdir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -3547,8 +3741,7 @@ def download_pdf():
             f.write(tex_content)
 
         # 2. CHÌA KHÓA: Trỏ đường dẫn tuyệt đối dựa trên vị trí của app.py
-        basedir = os.path.abspath(os.path.dirname(__file__))
-        cls_path_source = os.path.join(basedir, 'fami-exam.cls')
+        cls_path_source = str(BASE_DIR / 'fami-exam.cls')
         
         if os.path.exists(cls_path_source):
             shutil.copy(cls_path_source, tempdir)
@@ -3558,8 +3751,12 @@ def download_pdf():
 
         # 3. Gọi lệnh biên dịch ngay bên trong thư mục tạm
         try:
+            pdflatex_command = get_pdflatex_command()
+            if not pdflatex_command:
+                flash('Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE trong file .env.', 'danger')
+                return redirect(url_for('teacher_dashboard'))
             process = subprocess.run(
-                ['pdflatex', '-interaction=nonstopmode', 'exam.tex'], 
+                [pdflatex_command, '-interaction=nonstopmode', 'exam.tex'],
                 cwd=tempdir,
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE, 
@@ -4208,14 +4405,17 @@ def send_pdf_download(tex_content, filename):
         with open(tex_file_path, 'w', encoding='utf-8') as f:
             f.write(tex_content)
 
-        basedir = os.path.abspath(os.path.dirname(__file__))
-        cls_path_source = os.path.join(basedir, 'fami-exam.cls')
+        cls_path_source = str(BASE_DIR / 'fami-exam.cls')
         if os.path.exists(cls_path_source):
             shutil.copy(cls_path_source, tempdir)
 
         try:
+            pdflatex_command = get_pdflatex_command()
+            if not pdflatex_command:
+                flash('Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE trong file .env.', 'danger')
+                return redirect(url_for('teacher_dashboard'))
             process = subprocess.run(
-                ['pdflatex', '-interaction=nonstopmode', 'exam.tex'],
+                [pdflatex_command, '-interaction=nonstopmode', 'exam.tex'],
                 cwd=tempdir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -5431,10 +5631,16 @@ def custom_exam_generate_bulk():
                     f'Mã {variant_index + 1}, câu {question_index + 1}: {review.get("summary")}'
                 )
 
+    pdf_status = 'disabled'
     if not quality_issues and app.config.get('PDF_QUALITY_GATE', True):
-        _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
-        if compile_error:
-            quality_issues.append('PDF không biên dịch được: ' + compile_error)
+        if get_pdflatex_command():
+            pdf_status = 'passed'
+            _pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+            if compile_error:
+                pdf_status = 'failed'
+                quality_issues.append('PDF không biên dịch được: ' + compile_error)
+        else:
+            pdf_status = 'skipped'
 
     if quality_issues:
         return jsonify({
@@ -5443,6 +5649,7 @@ def custom_exam_generate_bulk():
             'quality_report': {
                 'status': 'failed',
                 'issues': quality_issues,
+                'pdf_status': pdf_status,
             }
         }), 400
 
@@ -5467,6 +5674,7 @@ def custom_exam_generate_bulk():
         'quality_report': {
             'status': 'passed',
             'issues': [],
+            'pdf_status': pdf_status,
         },
         'message': 'Đã chọn đề và lưu vào ngân hàng đề thi.'
     })
@@ -5481,8 +5689,7 @@ def download_sample(filename):
         abort(404) # Trả về lỗi 404 nếu cố tình tải file khác
 
     # Trỏ đến thư mục gốc chứa các file này
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    file_path = os.path.join(basedir, filename)
+    file_path = str(BASE_DIR / filename)
 
     if os.path.exists(file_path):
         # as_attachment=True sẽ ép trình duyệt tải file về thay vì mở trực tiếp trên tab mới

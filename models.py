@@ -27,6 +27,7 @@ class User(db.Model, UserMixin):
     full_name = db.Column(db.String(150), nullable=False)
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(50), nullable=False)
+    approval_status = db.Column(db.String(20), default='approved', nullable=False)
     student_code = db.Column(db.String(50), unique=True)
     student_code_verified = db.Column(db.Boolean, default=False, nullable=False)
     student_code_verified_at = db.Column(db.DateTime)

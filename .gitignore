@@ -8,3 +8,5 @@ venv/
 *.aux
 *.log
 *.pdf
+/build/
+/dist/

@@ -52,6 +52,23 @@
             <div class="row g-4 mb-4">
 
                 <div class="col-12">
+                    <label class="form-label fw-bold text-body">Loại tài khoản <span class="text-danger">*</span></label>
+                    <div class="btn-group w-100" role="group" aria-label="Chọn loại tài khoản">
+                        <input type="radio" class="btn-check" name="role" id="roleStudent" value="student"
+                            {{ 'checked' if form_data.role != 'teacher' else '' }}>
+                        <label class="btn btn-outline-primary py-3 fw-bold" for="roleStudent">
+                            <i class="fa-solid fa-user-graduate me-2"></i>Sinh viên
+                        </label>
+                        <input type="radio" class="btn-check" name="role" id="roleTeacher" value="teacher"
+                            {{ 'checked' if form_data.role == 'teacher' else '' }}>
+                        <label class="btn btn-outline-primary py-3 fw-bold" for="roleTeacher">
+                            <i class="fa-solid fa-chalkboard-user me-2"></i>Giảng viên
+                        </label>
+                    </div>
+                    <small class="text-muted" id="roleHelpText">Tài khoản giảng viên cần được quản trị viên phê duyệt trước khi đăng nhập.</small>
+                </div>
+
+                <div class="col-12">
                     <label class="form-label fw-bold text-body">Họ và tên <span class="text-danger">*</span></label>
                     <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
                         name="full_name" value="{{ form_data.full_name }}" minlength="2" maxlength="150"
@@ -91,18 +108,20 @@
                     </div>
                 </div>
 
+                <div class="col-12" id="studentProfileFields">
+                <div class="row g-4">
                 <div class="col-md-6">
                     <label class="form-label fw-bold text-body">Mã số sinh viên <span class="text-danger">*</span></label>
                     <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
                         name="student_code" value="{{ form_data.student_code }}" minlength="5" maxlength="30"
-                        pattern="[A-Za-z0-9-]+" placeholder="VD: 20237335" required>
+                        pattern="[A-Za-z0-9-]+" placeholder="VD: 20237335" data-student-required required>
                 </div>
 
                 <div class="col-md-6">
                     <label class="form-label fw-bold text-body">Tên trường <span class="text-danger">*</span></label>
                     <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
                         name="school_name" value="{{ form_data.school_name }}" list="schoolSuggestions"
-                        minlength="2" maxlength="200" placeholder="Nhập hoặc chọn tên trường" required>
+                        minlength="2" maxlength="200" placeholder="Nhập hoặc chọn tên trường" data-student-required required>
                     <datalist id="schoolSuggestions">
                         <option value="Đại học Bách Khoa Hà Nội"></option>
                     </datalist>
@@ -112,7 +131,9 @@
                     <label class="form-label fw-bold text-body">Tên ngành <span class="text-danger">*</span></label>
                     <input type="text" class="form-control bg-body-tertiary text-body border-0 shadow-sm py-3 px-4 rounded-3"
                         name="major" value="{{ form_data.major }}" minlength="2" maxlength="150"
-                        placeholder="VD: Khoa học máy tính" required>
+                        placeholder="VD: Khoa học máy tính" data-student-required required>
+                </div>
+                </div>
                 </div>
 
             </div>
@@ -147,6 +168,20 @@
         icon.classList.toggle('fa-eye', !show);
         icon.classList.toggle('fa-eye-slash', show);
     }
+
+    function updateRoleFields() {
+        const isStudent = document.getElementById('roleStudent').checked;
+        const studentFields = document.getElementById('studentProfileFields');
+        studentFields.classList.toggle('d-none', !isStudent);
+        studentFields.querySelectorAll('[data-student-required]').forEach((input) => {
+            input.required = isStudent;
+        });
+    }
+
+    document.querySelectorAll('input[name="role"]').forEach((input) => {
+        input.addEventListener('change', updateRoleFields);
+    });
+    updateRoleFields();
 
     document.getElementById('registerForm').addEventListener('submit', (event) => {
         const password = document.getElementById('registerPassword');

@@ -461,7 +461,7 @@
                             class="btn btn-outline-primary fw-bold rounded-pill px-4 shadow-sm disabled">
                             <i class="fa-solid fa-file-code me-2"></i>Xuất .TEX
                         </a>
-                        <a href="/download/pdf" id="btnExportPdf"
+                        <a href="/download/pdf" id="btnExportPdf" data-pdf-download data-tex-target="btnExportTex"
                             class="btn btn-primary fw-bold rounded-pill px-4 shadow disabled">
                             <i class="fa-solid fa-file-pdf me-2"></i>Lưu & Xuất .PDF
                         </a>
@@ -926,7 +926,7 @@
                         <a id="examBankDetailDownloadTex" href="#" class="btn btn-sm btn-outline-primary rounded-pill fw-bold">
                             <i class="fa-solid fa-file-code me-1"></i>Tải TEX toàn bộ
                         </a>
-                        <a id="examBankDetailDownloadPdf" href="#" class="btn btn-sm btn-primary rounded-pill fw-bold">
+                        <a id="examBankDetailDownloadPdf" href="#" data-pdf-download data-tex-target="examBankDetailDownloadTex" class="btn btn-sm btn-primary rounded-pill fw-bold">
                             <i class="fa-solid fa-file-pdf me-1"></i>Tải PDF toàn bộ
                         </a>
                     </div>
@@ -948,7 +948,7 @@
                                     <a id="examBankVariantDownloadTex" href="#" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold">
                                         <i class="fa-solid fa-file-code me-1"></i>TEX mã này
                                     </a>
-                                    <a id="examBankVariantDownloadPdf" href="#" class="btn btn-sm btn-outline-danger rounded-pill fw-bold">
+                                    <a id="examBankVariantDownloadPdf" href="#" data-pdf-download data-tex-target="examBankVariantDownloadTex" class="btn btn-sm btn-outline-danger rounded-pill fw-bold">
                                         <i class="fa-solid fa-file-pdf me-1"></i>PDF mã này
                                     </a>
                                     <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold" onclick="assignCurrentBankVariant()">
@@ -962,6 +962,43 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="miktexRequiredModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg bg-body">
+            <div class="modal-header border-bottom-0 px-4 pt-4 pb-0">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1">
+                        <i class="fa-solid fa-file-pdf me-2"></i>Chưa tìm thấy MiKTeX
+                    </h4>
+                    <p class="text-muted small mb-0">Ứng dụng cần pdflatex để biên dịch đề thi thành PDF.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body px-4 py-4">
+                <p class="mb-3">Bạn có thể cài MiKTeX miễn phí hoặc tiếp tục xuất file TEX.</p>
+                <ol class="small text-muted ps-3 mb-0">
+                    <li>Tải và cài MiKTeX từ trang chính thức.</li>
+                    <li>Mở MiKTeX Console, cập nhật package và bật tự động cài package còn thiếu.</li>
+                    <li>Quay lại ứng dụng và bấm <strong>Kiểm tra lại</strong>.</li>
+                </ol>
+                <div id="miktexStatusMessage" class="alert alert-info border-0 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0 d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                <a id="miktexTexFallback" href="/download/tex" class="btn btn-outline-primary">
+                    <i class="fa-solid fa-file-code me-1"></i>Xuất TEX
+                </a>
+                <button type="button" id="btnRetryLatexDetection" class="btn btn-outline-success" onclick="retryPendingPdfDownload()">
+                    <i class="fa-solid fa-rotate me-1"></i>Kiểm tra lại
+                </button>
+                <a href="https://miktex.org/download" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Tải MiKTeX
+                </a>
             </div>
         </div>
     </div>
@@ -3611,6 +3648,71 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
             toggleRandomQuantityInputs();
         }
     }
+
+    let pendingPdfDownloadUrl = '';
+
+    async function fetchLatexStatus() {
+        const response = await fetch(`/api/system/latex-status?_=${Date.now()}`, {
+            headers: { 'Cache-Control': 'no-cache' }
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Không kiểm tra được trạng thái MiKTeX.');
+        }
+        return data;
+    }
+
+    async function requestPdfDownload(pdfLink) {
+        pendingPdfDownloadUrl = pdfLink.href;
+        const texTarget = document.getElementById(pdfLink.dataset.texTarget || 'btnExportTex');
+        const texFallback = document.getElementById('miktexTexFallback');
+        if (texTarget && texFallback) texFallback.href = texTarget.href;
+
+        try {
+            const status = await fetchLatexStatus();
+            if (status.available) {
+                window.location.href = pendingPdfDownloadUrl;
+                return;
+            }
+            document.getElementById('miktexStatusMessage').classList.add('d-none');
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('miktexRequiredModal')).show();
+        } catch (error) {
+            alert(error.message || 'Không kiểm tra được trạng thái MiKTeX.');
+        }
+    }
+
+    async function retryPendingPdfDownload() {
+        const button = document.getElementById('btnRetryLatexDetection');
+        const message = document.getElementById('miktexStatusMessage');
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Đang kiểm tra';
+        try {
+            const status = await fetchLatexStatus();
+            if (status.available) {
+                message.className = 'alert alert-success border-0 small mt-3 mb-0';
+                message.textContent = status.message;
+                bootstrap.Modal.getInstance(document.getElementById('miktexRequiredModal'))?.hide();
+                if (pendingPdfDownloadUrl) window.location.href = pendingPdfDownloadUrl;
+                return;
+            }
+            message.className = 'alert alert-warning border-0 small mt-3 mb-0';
+            message.textContent = 'Vẫn chưa tìm thấy pdflatex. Hãy hoàn tất cài đặt MiKTeX rồi thử lại.';
+        } catch (error) {
+            message.className = 'alert alert-danger border-0 small mt-3 mb-0';
+            message.textContent = error.message || 'Không kiểm tra được trạng thái MiKTeX.';
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    }
+
+    document.addEventListener('click', function (event) {
+        const pdfLink = event.target.closest('a[data-pdf-download]');
+        if (!pdfLink || pdfLink.classList.contains('disabled')) return;
+        event.preventDefault();
+        requestPdfDownload(pdfLink);
+    });
 
     document.addEventListener('DOMContentLoaded', function () {
         const targetHash = window.location.hash;

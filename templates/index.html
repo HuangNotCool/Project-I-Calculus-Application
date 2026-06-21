@@ -10,6 +10,8 @@
             <a href="/student-dashboard" class="btn btn-register btn-lg px-5 rounded-pill shadow">Vào lớp học ngay</a>
         {% elif current_user.is_authenticated and current_user.role == 'teacher' %}
             <a href="/teacher-dashboard" class="btn btn-register btn-lg px-5 rounded-pill shadow">Vào trang quản lý</a>
+        {% elif current_user.is_authenticated and current_user.role == 'admin' %}
+            <a href="/admin-dashboard" class="btn btn-register btn-lg px-5 rounded-pill shadow">Vào trang quản trị</a>
         {% else %}
             <a href="/register" class="btn btn-register btn-lg px-5 rounded-pill shadow">Bắt đầu học miễn phí</a>
         {% endif %}

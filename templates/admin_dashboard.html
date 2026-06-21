@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div>
+            <h2 class="fw-bold mb-1"><i class="fa-solid fa-shield-halved text-danger me-2"></i>Quản trị hệ thống</h2>
+            <p class="text-muted mb-0">Duyệt quyền giảng viên trước khi họ có thể tạo lớp và sinh đề.</p>
+        </div>
+        <a href="{{ url_for('profile') }}" class="btn btn-outline-primary rounded-pill px-4">
+            <i class="fa-solid fa-key me-2"></i>Đổi mật khẩu
+        </a>
+    </div>
+
+    {% if uses_default_password %}
+    <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-3" role="alert">
+        <i class="fa-solid fa-triangle-exclamation fs-4 mt-1"></i>
+        <div>
+            <div class="fw-bold">Tài khoản đang dùng mật khẩu mặc định.</div>
+            <div>Hãy đổi mật khẩu quản trị ngay để bảo vệ quyền duyệt tài khoản.</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="border-start border-4 border-warning bg-body shadow-sm p-3 rounded-2">
+                <div class="text-muted small">Đang chờ duyệt</div>
+                <div class="fs-3 fw-bold">{{ grouped_teachers.pending|length }}</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="border-start border-4 border-success bg-body shadow-sm p-3 rounded-2">
+                <div class="text-muted small">Đã phê duyệt</div>
+                <div class="fs-3 fw-bold">{{ grouped_teachers.approved|length }}</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="border-start border-4 border-danger bg-body shadow-sm p-3 rounded-2">
+                <div class="text-muted small">Đã từ chối</div>
+                <div class="fs-3 fw-bold">{{ grouped_teachers.rejected|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pendingTeachers" type="button">
+                Chờ duyệt <span class="badge text-bg-warning ms-1">{{ grouped_teachers.pending|length }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#approvedTeachers" type="button">Đã duyệt</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#rejectedTeachers" type="button">Đã từ chối</button>
+        </li>
+    </ul>
+
+    <div class="tab-content bg-body shadow-sm rounded-2 p-3">
+        {% for status, label in [('pending', 'Chưa có đăng ký giảng viên nào cần duyệt.'), ('approved', 'Chưa có giảng viên được phê duyệt.'), ('rejected', 'Chưa có đăng ký nào bị từ chối.')] %}
+        <div class="tab-pane fade {{ 'show active' if status == 'pending' else '' }}"
+            id="{{ status }}Teachers" role="tabpanel">
+            {% if grouped_teachers[status] %}
+            <div class="table-responsive">
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Họ tên</th>
+                            <th>Tên đăng nhập</th>
+                            <th class="text-end">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for teacher in grouped_teachers[status] %}
+                        <tr>
+                            <td class="fw-semibold">{{ teacher.display_name }}</td>
+                            <td><code>{{ teacher.username }}</code></td>
+                            <td>
+                                <div class="d-flex justify-content-end gap-2">
+                                    {% if status != 'approved' %}
+                                    <form method="POST" action="{{ url_for('review_teacher_registration', user_id=teacher.id, action='approve') }}">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-success" type="submit" title="Phê duyệt">
+                                            <i class="fa-solid fa-check me-1"></i>Duyệt
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    {% if status != 'rejected' %}
+                                    <form method="POST" action="{{ url_for('review_teacher_registration', user_id=teacher.id, action='reject') }}">
+                                        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Từ chối">
+                                            <i class="fa-solid fa-xmark me-1"></i>Từ chối
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="fa-regular fa-folder-open fs-2 mb-2"></i>
+                <div>{{ label }}</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
