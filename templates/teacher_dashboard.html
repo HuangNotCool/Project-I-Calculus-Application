@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block content %}
 
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/theme/dracula.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/lib/codemirror.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/codemirror/theme/dracula.css') }}">
+<script src="{{ url_for('static', filename='vendor/codemirror/lib/codemirror.js') }}"></script>
 
 <style>
     /* Chỉnh cho CodeMirror lấp đầy khung và font chữ giống VS Code */
@@ -1253,13 +1253,15 @@
                             .filter(Boolean)
                             .map(escapeHtml)
                             .join(' • ');
+                        const avatarInitial = escapeHtml((student.display_name || '?').trim().charAt(0).toUpperCase());
                         const verificationBadge = student.student_code_verified
                             ? '<span class="badge text-bg-success ms-2">Đã xác minh</span>'
                             : '<span class="badge text-bg-secondary ms-2">Chưa xác minh</span>';
                         listContainer.insertAdjacentHTML('beforeend', `
                             <div class="list-group-item bg-body border-0 border-bottom p-3 d-flex align-items-center feature-card-hover">
                                 <span class="fw-bold text-muted me-3">${index + 1}.</span>
-                                <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(student.display_name)}&background=random&color=fff&rounded=true" width="45" class="rounded-circle me-3 shadow-sm" alt="">
+                                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold me-3 shadow-sm flex-shrink-0"
+                                    style="width:45px;height:45px;" aria-label="Avatar ${escapeHtml(student.display_name)}">${avatarInitial}</div>
                                 <div>
                                     <h6 class="fw-bold mb-0 text-body">${escapeHtml(student.display_name)}${verificationBadge}</h6>
                                     <small class="text-muted">${profileLine || 'Chưa cập nhật thông tin sinh viên'}</small>

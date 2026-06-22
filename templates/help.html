@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 960px;">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-1"><i class="fa-regular fa-circle-question text-primary me-2"></i>Hướng dẫn sử dụng</h2>
+        <p class="text-muted mb-0">Quy trình chính dành cho {{ 'quản trị viên' if current_user.role == 'admin' else 'giảng viên' if current_user.role == 'teacher' else 'sinh viên' }}.</p>
+    </div>
+
+    {% if current_user.role == 'student' %}
+    <section id="student-guide" class="border-top pt-4 mb-5">
+        <h3 class="h5 fw-bold mb-3">Học tập và làm bài</h3>
+        <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
+            <li class="list-group-item p-3">Mở <strong>Lớp học của bạn</strong>, nhập mã lớp do giảng viên cung cấp và chờ duyệt nếu lớp yêu cầu.</li>
+            <li class="list-group-item p-3">Vào <strong>Thi &amp; Luyện thi</strong> để xem các bài đang mở, thời hạn và số lần được phép làm.</li>
+            <li class="list-group-item p-3">Khi bắt đầu bài, hoàn thành trong thời gian quy định và bấm nộp trước khi hết giờ.</li>
+            <li class="list-group-item p-3">Xem kết quả khi giảng viên cho phép công bố; thành tựu được cập nhật tự động theo tiến độ.</li>
+        </ol>
+        <a href="{{ url_for('student_dashboard') }}" class="btn btn-primary rounded-pill px-4 mt-3">Về trang học tập</a>
+    </section>
+    {% elif current_user.role == 'teacher' %}
+    <section id="teacher-guide" class="border-top pt-4 mb-5">
+        <h3 class="h5 fw-bold mb-3">Sinh đề và quản lý lớp</h3>
+        <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
+            <li class="list-group-item p-3">Dùng <strong>Trình Sinh Đề Tự Động</strong> để sinh ngẫu nhiên hoặc nhập mẫu LaTeX tùy chỉnh.</li>
+            <li class="list-group-item p-3">Kiểm tra các seed đang xem, sau đó thêm bản đã chốt vào <strong>Ngân hàng đề thi</strong>.</li>
+            <li class="list-group-item p-3">Tạo lớp, chọn chính sách tham gia và chia sẻ mã lớp cho sinh viên.</li>
+            <li class="list-group-item p-3">Giao đề từ ngân hàng, đặt thời gian và chính sách kết quả, sau đó theo dõi bài nộp trong trang quản lý lớp.</li>
+        </ol>
+        <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-primary rounded-pill px-4 mt-3">Về trang giảng viên</a>
+    </section>
+    {% else %}
+    <section id="admin-guide" class="border-top pt-4 mb-5">
+        <h3 class="h5 fw-bold mb-3">Duyệt tài khoản và bảo vệ dữ liệu</h3>
+        <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
+            <li class="list-group-item p-3">Kiểm tra danh sách giảng viên chờ duyệt và xác nhận đúng tài khoản trước khi phê duyệt.</li>
+            <li class="list-group-item p-3">Có thể thu hồi quyền bằng thao tác từ chối đối với tài khoản đã duyệt.</li>
+            <li class="list-group-item p-3">Dùng <strong>Sao lưu dữ liệu</strong> định kỳ và lưu file database ở vị trí an toàn.</li>
+            <li class="list-group-item p-3">Theo dõi trạng thái MiKTeX trong khu vực trạng thái bản cài nếu cần hỗ trợ xuất PDF.</li>
+        </ol>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary rounded-pill px-4 mt-3">Về trang quản trị</a>
+    </section>
+    {% endif %}
+
+    <section class="border-top pt-4">
+        <h3 class="h5 fw-bold mb-3">Thông tin chung</h3>
+        <div class="row g-3">
+            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Hồ sơ cá nhân</strong><div class="small text-muted mt-1">Chỉnh sửa họ tên hiển thị, tên đăng nhập và đổi mật khẩu trong biểu tượng hồ sơ trên thanh điều hướng.</div></div></div>
+            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Xuất PDF</strong><div class="small text-muted mt-1">Cần cài MiKTeX. Nếu chưa có, ứng dụng vẫn cho phép tải mã nguồn TEX.</div></div></div>
+        </div>
+    </section>
+</div>
+{% endblock %}

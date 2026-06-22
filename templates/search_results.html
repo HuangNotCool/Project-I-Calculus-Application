@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container py-4" style="max-width: 960px;">
+    <div class="mb-4">
+        <h2 class="fw-bold mb-1"><i class="fa-solid fa-magnifying-glass text-primary me-2"></i>Kết quả tìm kiếm</h2>
+        <p class="text-muted mb-0">Kết quả chỉ bao gồm nội dung tài khoản của bạn được phép truy cập.</p>
+    </div>
+
+    <form method="GET" action="{{ url_for('global_search') }}" role="search" class="mb-4">
+        <div class="input-group input-group-lg shadow-sm">
+            <input class="form-control" type="search" name="q" value="{{ query }}" maxlength="100"
+                placeholder="Nhập ít nhất 2 ký tự" aria-label="Từ khóa tìm kiếm" autofocus>
+            <button class="btn btn-primary px-4" type="submit">
+                <i class="fa-solid fa-magnifying-glass me-2"></i>Tìm
+            </button>
+        </div>
+    </form>
+
+    {% if query|length < 2 %}
+    <div class="text-center text-muted py-5 border-top">
+        <i class="fa-solid fa-keyboard fs-2 mb-3"></i>
+        <div>Nhập ít nhất 2 ký tự để bắt đầu tìm kiếm.</div>
+    </div>
+    {% elif results %}
+    <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2">
+        <span class="fw-semibold">Tìm thấy {{ results|length }} kết quả cho “{{ query }}”</span>
+    </div>
+    <div class="list-group list-group-flush shadow-sm bg-body rounded-2 overflow-hidden">
+        {% for result in results %}
+        <a href="{{ result.link }}" class="list-group-item list-group-item-action p-3 p-md-4">
+            <div class="d-flex gap-3 align-items-start">
+                <div class="d-flex align-items-center justify-content-center rounded-circle bg-primary-subtle text-primary flex-shrink-0"
+                    style="width: 44px; height: 44px;">
+                    <i class="fa-solid {{ result.icon }}"></i>
+                </div>
+                <div class="min-w-0 flex-grow-1">
+                    <div class="small text-primary fw-semibold">{{ result.kind }}</div>
+                    <div class="fw-bold text-body text-break">{{ result.title }}</div>
+                    {% if result.description %}<div class="small text-muted text-break mt-1">{{ result.description }}</div>{% endif %}
+                </div>
+                <i class="fa-solid fa-chevron-right text-muted mt-3"></i>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5 border-top">
+        <i class="fa-regular fa-folder-open fs-2 mb-3"></i>
+        <div>Không tìm thấy nội dung phù hợp với “{{ query }}”.</div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -12,16 +12,6 @@
         </a>
     </div>
 
-    {% if uses_default_password %}
-    <div class="alert alert-danger border-0 shadow-sm d-flex align-items-start gap-3" role="alert">
-        <i class="fa-solid fa-triangle-exclamation fs-4 mt-1"></i>
-        <div>
-            <div class="fw-bold">Tài khoản đang dùng mật khẩu mặc định.</div>
-            <div>Hãy đổi mật khẩu quản trị ngay để bảo vệ quyền duyệt tài khoản.</div>
-        </div>
-    </div>
-    {% endif %}
-
     <div class="row g-3 mb-4">
         <div class="col-md-4">
             <div class="border-start border-4 border-warning bg-body shadow-sm p-3 rounded-2">
@@ -110,5 +100,61 @@
         </div>
         {% endfor %}
     </div>
+
+    <section class="mt-5 pt-4 border-top">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+            <div>
+                <h3 class="h5 fw-bold mb-1"><i class="fa-solid fa-sliders me-2 text-primary"></i>Trạng thái bản cài</h3>
+                <p class="text-muted mb-0">Thông tin cần thiết khi kiểm tra và sao lưu ứng dụng.</p>
+            </div>
+            <form method="POST" action="{{ url_for('admin_backup_database') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-primary rounded-pill px-4" type="submit">
+                    <i class="fa-solid fa-database me-2"></i>Sao lưu dữ liệu
+                </button>
+            </form>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-sm-6 col-lg-3">
+                <div class="h-100 bg-body shadow-sm rounded-2 p-3 border-start border-4 border-primary">
+                    <div class="text-muted small">Phiên bản</div>
+                    <div class="fw-bold mt-1">{{ system_info.version }}</div>
+                    <div class="small text-muted">{{ 'Bản Windows đóng gói' if system_info.is_packaged else 'Chế độ phát triển' }}</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="h-100 bg-body shadow-sm rounded-2 p-3 border-start border-4 {{ 'border-success' if system_info.latex_available else 'border-warning' }}">
+                    <div class="text-muted small">Xuất PDF</div>
+                    <div class="fw-bold mt-1">{{ 'Sẵn sàng' if system_info.latex_available else 'Chưa có MiKTeX' }}</div>
+                    {% if system_info.latex_available %}
+                    <div class="small text-muted">{{ system_info.latex_engine }}</div>
+                    {% else %}
+                    <a href="https://miktex.org/download" target="_blank" rel="noopener" class="small">Tải MiKTeX</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="h-100 bg-body shadow-sm rounded-2 p-3 border-start border-4 border-info">
+                    <div class="text-muted small">Database</div>
+                    <div class="fw-bold mt-1">{{ system_info.database_size_mb }} MB</div>
+                    <div class="small text-muted">SQLite cục bộ</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="h-100 bg-body shadow-sm rounded-2 p-3 border-start border-4 border-secondary">
+                    <div class="text-muted small">Bản sao lưu</div>
+                    <div class="fw-bold mt-1">{{ system_info.backup_count }} bản</div>
+                    <div class="small text-muted text-truncate" title="{{ system_info.latest_backup }}">
+                        {{ system_info.latest_backup or 'Chưa có bản sao lưu' }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="small text-muted mt-3 text-break">
+            <i class="fa-regular fa-folder me-1"></i>Thư mục dữ liệu: <code>{{ system_info.data_directory }}</code>
+        </div>
+    </section>
 </div>
 {% endblock %}

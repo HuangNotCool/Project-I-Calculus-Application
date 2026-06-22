@@ -55,5 +55,6 @@ LATEX_ENGINE=C:\Program Files\MiKTeX\miktex\bin\x64\pdflatex.exe
 
 - Windows 10/11 can Microsoft Edge WebView2 Runtime de hien thi cua so native.
 - Xuat PDF can MiKTeX hoac mot ban `pdflatex` khac.
-- Ban thu nghiem hien van dung mot so CSS, JavaScript va anh tu CDN, vi vay can
-  Internet de giao dien hien thi day du.
+- Bootstrap, MathJax, Font Awesome, AOS va CodeMirror da duoc dong goi trong
+  `static/vendor`; giao dien va cong thuc Toan hoat dong ma khong can Internet.
+- Internet chi can khi nguoi dung chu dong mo trang tai MiKTeX.

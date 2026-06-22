@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Giải Tích HUST - Ôn luyện & Sinh đề</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         .notification-menu {
@@ -45,10 +45,10 @@
             }
         };
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="{{ url_for('static', filename='vendor/mathjax/es5/tex-mml-chtml.js') }}"></script>
     
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}">
+    <link href="{{ url_for('static', filename='vendor/aos/aos.css') }}" rel="stylesheet">
 </head>
 <body>
 
@@ -56,16 +56,42 @@
         <div class="container">
             <a class="navbar-brand fw-bold" href="/"><i class="fa-solid fa-graduation-cap me-2"></i>Giải Tích HUST</a>
             
-            <form class="d-none d-lg-flex mx-auto w-50">
-                <input class="form-control rounded-pill px-4" type="search" placeholder="Tìm kiếm tài liệu, đề thi Giải tích 1...">
+            {% if current_user.is_authenticated %}
+            <form class="d-none d-lg-flex mx-auto w-50 position-relative" method="GET" action="{{ url_for('global_search') }}" role="search">
+                <input class="form-control rounded-pill ps-4 pe-5" type="search" name="q"
+                    value="{{ request.args.get('q', '') if request.endpoint == 'global_search' else '' }}"
+                    maxlength="100" aria-label="Tìm kiếm" placeholder="Tìm lớp học, đề thi hoặc bài tập...">
+                <button class="btn btn-link position-absolute end-0 top-50 translate-middle-y me-2 text-primary"
+                    type="submit" title="Tìm kiếm" aria-label="Tìm kiếm">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
             </form>
+            {% endif %}
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                {% if current_user.is_authenticated %}
+                <form class="d-lg-none my-3" method="GET" action="{{ url_for('global_search') }}" role="search">
+                    <div class="input-group">
+                        <input class="form-control" type="search" name="q" maxlength="100"
+                            value="{{ request.args.get('q', '') if request.endpoint == 'global_search' else '' }}"
+                            aria-label="Tìm kiếm" placeholder="Tìm lớp học, đề thi hoặc bài tập...">
+                        <button class="btn btn-primary" type="submit" aria-label="Tìm kiếm">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
                 <ul class="navbar-nav ms-auto align-items-center">
                     {% if current_user.is_authenticated %}
+                        <li class="nav-item me-2">
+                            <a href="{{ url_for('help_center') }}" class="btn btn-outline-primary rounded-circle"
+                                title="Hướng dẫn sử dụng" aria-label="Hướng dẫn sử dụng">
+                                <i class="fa-regular fa-circle-question"></i>
+                            </a>
+                        </li>
                         {% if current_user.role != 'admin' %}
                         <li class="nav-item me-2">
                             <a href="{{ url_for('learning_calendar') }}" class="btn btn-outline-primary rounded-circle"
@@ -155,12 +181,12 @@
         {% endblock %}
     </main>
 
-    <footer class="bg-dark text-light py-4 mt-5 text-center">
-        <p class="mb-0">© 2026 Đồ án I - Hệ thống Ôn tập Giải tích Bách Khoa</p>
+    <footer class="bg-dark text-light py-4 text-center">
+        <p class="mb-0">2026 Đồ án I - Toán Tin K68</p>
     </footer>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script src="{{ url_for('static', filename='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/aos/aos.js') }}"></script>
     <script>
         const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
         const authenticatedDashboardUrl = {{ (

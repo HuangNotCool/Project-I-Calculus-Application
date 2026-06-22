@@ -15,7 +15,7 @@ from random_exam import (
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_migrate import Migrate, upgrade, stamp
 from werkzeug.security import generate_password_hash, check_password_hash
-from sqlalchemy import inspect, func
+from sqlalchemy import inspect, func, or_
 from sqlalchemy.exc import IntegrityError
 from functools import wraps
 from pathlib import Path
@@ -115,6 +115,7 @@ app.config['PDF_QUALITY_GATE'] = os.getenv('PDF_QUALITY_GATE', '1') == '1'
 
 DEFAULT_ADMIN_USERNAME = 'admin'
 DEFAULT_ADMIN_PASSWORD = 'hustoneloveonefuture'
+APP_VERSION = '0.9.0'
 
 
 def app_now():
@@ -2672,6 +2673,177 @@ def home():
     return render_template('index.html')
 
 
+@app.route('/search')
+@login_required
+def global_search():
+    query = ' '.join(str(request.args.get('q') or '').split())[:100]
+    results = []
+    if len(query) < 2:
+        return render_template('search_results.html', query=query, results=results)
+
+    escaped_query = query.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    pattern = f'%{escaped_query}%'
+
+    def matches(*columns):
+        return or_(*(column.ilike(pattern, escape='\\') for column in columns))
+
+    def add_result(kind, title, description, link, icon):
+        results.append({
+            'kind': kind,
+            'title': title,
+            'description': description,
+            'link': link,
+            'icon': icon,
+        })
+
+    if current_user.role == 'teacher':
+        classes = (
+            Class.query
+            .filter(
+                Class.teacher_id == current_user.id,
+                matches(Class.name, Class.code, Class.description),
+            )
+            .order_by(Class.name.asc())
+            .limit(10)
+            .all()
+        )
+        for classroom in classes:
+            add_result(
+                'Lớp học', classroom.name,
+                f'Mã lớp {classroom.code} · {len(classroom.students)} sinh viên',
+                url_for('teacher_class_detail', class_id=classroom.id),
+                'fa-users-chalkboard',
+            )
+
+        bank_items = (
+            ExamBank.query
+            .filter(
+                ExamBank.teacher_id == current_user.id,
+                matches(ExamBank.title, ExamBank.topic, ExamBank.description),
+            )
+            .order_by(ExamBank.updated_at.desc())
+            .limit(10)
+            .all()
+        )
+        for item in bank_items:
+            add_result(
+                'Ngân hàng đề', item.title,
+                item.topic or f'{item.total_questions or 0} câu hỏi',
+                url_for('teacher_dashboard', _anchor='tab-exam-bank'),
+                'fa-database',
+            )
+
+        templates = (
+            ExamTemplate.query
+            .filter(
+                ExamTemplate.teacher_id == current_user.id,
+                matches(ExamTemplate.title, ExamTemplate.topic, ExamTemplate.description),
+            )
+            .order_by(ExamTemplate.updated_at.desc())
+            .limit(10)
+            .all()
+        )
+        for item in templates:
+            add_result(
+                'Mẫu sinh đề', item.title, item.topic or 'Mẫu đề tùy chỉnh',
+                url_for('teacher_dashboard', _anchor='tab-exam-generator'),
+                'fa-file-code',
+            )
+
+        assignments = (
+            Assignment.query
+            .filter(
+                Assignment.teacher_id == current_user.id,
+                matches(Assignment.title, Assignment.description),
+            )
+            .order_by(Assignment.updated_at.desc())
+            .limit(10)
+            .all()
+        )
+        for assignment in assignments:
+            add_result(
+                'Bài đã giao', assignment.title,
+                assignment.classroom.name if assignment.classroom else '',
+                url_for(
+                    'teacher_class_detail',
+                    class_id=assignment.class_id,
+                    _anchor='classAssignments',
+                ),
+                'fa-clipboard-list',
+            )
+
+    elif current_user.role == 'student':
+        class_ids = [classroom.id for classroom in current_user.enrolled_classes]
+        if class_ids:
+            classes = (
+                Class.query
+                .filter(
+                    Class.id.in_(class_ids),
+                    matches(Class.name, Class.code, Class.description),
+                )
+                .order_by(Class.name.asc())
+                .limit(10)
+                .all()
+            )
+            for classroom in classes:
+                add_result(
+                    'Lớp học', classroom.name, f'Mã lớp {classroom.code}',
+                    url_for('student_dashboard', _anchor='tab-my-classes'),
+                    'fa-school',
+                )
+
+            assignments = (
+                Assignment.query
+                .filter(
+                    Assignment.class_id.in_(class_ids),
+                    Assignment.is_active.is_(True),
+                    matches(Assignment.title, Assignment.description),
+                )
+                .order_by(Assignment.due_at.asc(), Assignment.id.desc())
+                .limit(20)
+                .all()
+            )
+            for assignment in assignments:
+                add_result(
+                    'Bài tập', assignment.title,
+                    assignment.classroom.name if assignment.classroom else '',
+                    url_for('student_dashboard', _anchor='tab-practice'),
+                    'fa-pen-to-square',
+                )
+
+    elif current_user.role == 'admin':
+        teachers = (
+            User.query
+            .filter(
+                User.role == 'teacher',
+                matches(User.full_name, User.username),
+            )
+            .order_by(User.full_name.asc())
+            .limit(30)
+            .all()
+        )
+        status_labels = {
+            'pending': 'Chờ duyệt',
+            'approved': 'Đã phê duyệt',
+            'rejected': 'Đã từ chối',
+        }
+        for teacher in teachers:
+            add_result(
+                'Giảng viên', teacher.display_name,
+                f'@{teacher.username} · {status_labels.get(teacher.approval_status, teacher.approval_status)}',
+                url_for('admin_dashboard'),
+                'fa-chalkboard-user',
+            )
+
+    return render_template('search_results.html', query=query, results=results)
+
+
+@app.route('/help')
+@login_required
+def help_center():
+    return render_template('help.html')
+
+
 @app.route('/api/security/csrf-token')
 def api_security_csrf_token():
     return jsonify({'success': True, 'csrf_token': get_csrf_token()})
@@ -2827,13 +2999,29 @@ def admin_dashboard():
         status: [teacher for teacher in teachers if teacher.approval_status == status]
         for status in ('pending', 'approved', 'rejected')
     }
+    database_path = Path(db.engine.url.database).resolve() if db.engine.url.database else None
+    latex_command = get_pdflatex_command()
+    backup_dir = (INSTANCE_DIR / 'backups').resolve()
+    backup_files = sorted(
+        backup_dir.glob('database_*.db'),
+        key=lambda item: item.stat().st_mtime,
+        reverse=True,
+    ) if backup_dir.exists() else []
+    system_info = {
+        'version': APP_VERSION,
+        'is_packaged': bool(getattr(sys, 'frozen', False)),
+        'latex_available': bool(latex_command),
+        'latex_engine': Path(latex_command).name if latex_command else '',
+        'database_size_mb': round(database_path.stat().st_size / (1024 * 1024), 2)
+        if database_path and database_path.exists() else 0,
+        'data_directory': str(INSTANCE_DIR),
+        'backup_count': len(backup_files),
+        'latest_backup': backup_files[0].name if backup_files else '',
+    }
     return render_template(
         'admin_dashboard.html',
         grouped_teachers=grouped_teachers,
-        uses_default_password=check_password_hash(
-            current_user.password,
-            DEFAULT_ADMIN_PASSWORD,
-        ),
+        system_info=system_info,
     )
 
 
@@ -2860,6 +3048,25 @@ def review_teacher_registration(user_id, action):
         'success' if action == 'approve' else 'warning',
     )
     return redirect(url_for('admin_dashboard'))
+
+
+@app.route('/admin/data/backup', methods=['POST'])
+@role_required('admin')
+@rate_limit(3, 60, 'admin-backup')
+def admin_backup_database():
+    try:
+        backup_path = backup_sqlite_database()
+    except (RuntimeError, FileNotFoundError, OSError, sqlite3.Error) as exc:
+        app.logger.exception('Khong the sao luu database tu giao dien admin')
+        flash(f'Không thể sao lưu dữ liệu: {exc}', 'danger')
+        return redirect(url_for('admin_dashboard'))
+
+    return send_file(
+        backup_path,
+        as_attachment=True,
+        download_name=backup_path.name,
+        mimetype='application/vnd.sqlite3',
+    )
 
 
 @app.route('/profile')
