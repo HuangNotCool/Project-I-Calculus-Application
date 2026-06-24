@@ -84,8 +84,11 @@ def test_help_page_is_role_specific(client, seeded_course):
     student_help = client.get('/help')
     assert student_help.status_code == 200
     assert 'Học tập và làm bài'.encode() in student_help.data
+    assert 'Bắt đầu nhanh'.encode() in student_help.data
     assert 'Sinh đề và quản lý lớp'.encode() not in student_help.data
 
     login_as(client, seeded_course['teacher_id'])
     teacher_help = client.get('/help')
     assert 'Sinh đề và quản lý lớp'.encode() in teacher_help.data
+    assert 'Thư mục xuất'.encode() in teacher_help.data
+    assert 'Dữ liệu local'.encode() in teacher_help.data

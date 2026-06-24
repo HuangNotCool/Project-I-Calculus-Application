@@ -314,6 +314,112 @@ def load_current_exam_tex():
     return session.get('current_exam_tex')
 
 
+def get_export_settings_path():
+    return Path(app.config.get('EXPORT_SETTINGS_PATH') or (INSTANCE_DIR / 'export_settings.json'))
+
+
+def get_default_export_dir():
+    configured = str(app.config.get('DEFAULT_EXPORT_DIR') or os.getenv('GIAITICH_EXPORT_DIR', '')).strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    downloads_dir = Path.home() / 'Downloads'
+    return (downloads_dir / 'GiaiTichHUST').resolve()
+
+
+def read_export_settings():
+    settings_path = get_export_settings_path()
+    if not settings_path.exists():
+        return {}
+    try:
+        data = json.loads(settings_path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_export_settings(settings):
+    settings_path = get_export_settings_path()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = settings_path.with_suffix(settings_path.suffix + '.tmp')
+    temporary_path.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding='utf-8')
+    temporary_path.replace(settings_path)
+
+
+def get_user_export_dir(user_id=None):
+    user_key = str(user_id or current_user.id)
+    settings = read_export_settings()
+    raw_path = ''
+    if isinstance(settings.get(user_key), dict):
+        raw_path = str(settings[user_key].get('export_dir') or '').strip()
+    export_dir = Path(raw_path).expanduser().resolve() if raw_path else get_default_export_dir()
+    export_dir.mkdir(parents=True, exist_ok=True)
+    return export_dir
+
+
+def set_user_export_dir(raw_path):
+    export_dir = Path(str(raw_path or '').strip()).expanduser().resolve()
+    export_dir.mkdir(parents=True, exist_ok=True)
+    if not export_dir.is_dir():
+        raise ValueError('Đường dẫn đã chọn không phải là thư mục.')
+
+    settings = read_export_settings()
+    user_key = str(current_user.id)
+    user_settings = settings.get(user_key) if isinstance(settings.get(user_key), dict) else {}
+    user_settings['export_dir'] = str(export_dir)
+    settings[user_key] = user_settings
+    write_export_settings(settings)
+    return export_dir
+
+
+def safe_export_filename(filename):
+    cleaned = re.sub(r'[^A-Za-z0-9_.-]+', '_', str(filename or '').strip())
+    cleaned = cleaned.strip('._')
+    return cleaned or 'download'
+
+
+def reserve_export_path(export_dir, filename):
+    safe_name = safe_export_filename(filename)
+    candidate = export_dir / safe_name
+    if not candidate.exists():
+        return candidate
+
+    stem = candidate.stem or 'download'
+    suffix = candidate.suffix
+    for index in range(1, 1000):
+        numbered = export_dir / f'{stem}_{index}{suffix}'
+        if not numbered.exists():
+            return numbered
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    return export_dir / f'{stem}_{timestamp}{suffix}'
+
+
+def save_tex_to_export_dir(tex_content, filename):
+    export_dir = get_user_export_dir()
+    output_path = reserve_export_path(export_dir, filename)
+    output_path.write_text(str(tex_content or ''), encoding='utf-8')
+    return output_path
+
+
+def save_pdf_to_export_dir(tex_content, filename):
+    pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+    if compile_error:
+        raise RuntimeError(compile_error)
+    export_dir = get_user_export_dir()
+    output_path = reserve_export_path(export_dir, filename)
+    output_path.write_bytes(pdf_bytes)
+    return output_path
+
+
+def export_file_payload(output_path):
+    return {
+        'success': True,
+        'filename': output_path.name,
+        'path': str(output_path),
+        'directory': str(output_path.parent),
+        'message': f'Đã lưu file tại {output_path}'
+    }
+
+
 def store_random_exam_draft(draft):
     output_dir = get_current_exam_output_dir()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -3184,7 +3290,11 @@ def teacher_dashboard():
     # Lấy toàn bộ lớp học do giáo viên này tạo từ CSDL
     my_classes = Class.query.filter_by(teacher_id=current_user.id).all()
     
-    return render_template('teacher_dashboard.html', classes=my_classes)
+    return render_template(
+        'teacher_dashboard.html',
+        classes=my_classes,
+        export_dir=str(get_user_export_dir()),
+    )
 
 
 @app.route('/teacher/classes/<int:class_id>')
@@ -3887,6 +3997,38 @@ def get_pdflatex_command():
     return None
 
 
+def subprocess_no_window_options():
+    if os.name != 'nt':
+        return {}
+
+    options = {}
+    create_no_window = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+    if create_no_window:
+        options['creationflags'] = create_no_window
+
+    try:
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= getattr(subprocess, 'STARTF_USESHOWWINDOW', 0)
+        startupinfo.wShowWindow = getattr(subprocess, 'SW_HIDE', 0)
+        options['startupinfo'] = startupinfo
+    except (AttributeError, ValueError):
+        pass
+
+    return options
+
+
+def run_pdflatex_command(args, cwd, timeout=None):
+    return subprocess.run(
+        args,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=timeout,
+        **subprocess_no_window_options(),
+    )
+
+
 def compile_tex_pdf_bytes(tex_content, timeout_seconds=60):
     with tempfile.TemporaryDirectory() as tempdir:
         tex_file_path = os.path.join(tempdir, 'exam.tex')
@@ -3903,14 +4045,15 @@ def compile_tex_pdf_bytes(tex_content, timeout_seconds=60):
             return None, 'Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE.'
 
         try:
-            process = subprocess.run(
-                [pdflatex_command, '-interaction=nonstopmode', '-halt-on-error', 'exam.tex'],
-                cwd=tempdir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=timeout_seconds,
-            )
+            process = None
+            for _ in range(2):
+                process = run_pdflatex_command(
+                    [pdflatex_command, '-interaction=nonstopmode', '-halt-on-error', 'exam.tex'],
+                    cwd=tempdir,
+                    timeout=timeout_seconds,
+                )
+                if process.returncode != 0:
+                    break
         except subprocess.TimeoutExpired:
             return None, f'Biên dịch PDF vượt quá {timeout_seconds} giây.'
         except OSError as exc:
@@ -3930,6 +4073,8 @@ def download_pdf():
     if not tex_content:
         flash('Không tìm thấy đề thi. Vui lòng tạo lại.', 'danger')
         return redirect(url_for('teacher_dashboard'))
+
+    return send_pdf_download(tex_content, 'De_Thi_Giai_Tich.pdf')
 
     import tempfile
     import os
@@ -3962,12 +4107,9 @@ def download_pdf():
             if not pdflatex_command:
                 flash('Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE trong file .env.', 'danger')
                 return redirect(url_for('teacher_dashboard'))
-            process = subprocess.run(
+            process = run_pdflatex_command(
                 [pdflatex_command, '-interaction=nonstopmode', 'exam.tex'],
                 cwd=tempdir,
-                stdout=subprocess.PIPE, 
-                stderr=subprocess.PIPE, 
-                text=True
             )
             
             if process.returncode != 0:
@@ -4589,6 +4731,115 @@ def get_exam_bank_variant(item, variant_index):
     return variant
 
 
+def save_export_response(tex_content, filename, file_format):
+    try:
+        if file_format == 'tex':
+            output_path = save_tex_to_export_dir(tex_content, filename)
+        elif file_format == 'pdf':
+            output_path = save_pdf_to_export_dir(tex_content, filename)
+        else:
+            return jsonify({'success': False, 'message': 'Định dạng xuất file không hợp lệ.'}), 400
+    except RuntimeError as exc:
+        return jsonify({'success': False, 'message': f'Không xuất được PDF: {exc}'}), 400
+    except OSError as exc:
+        return jsonify({'success': False, 'message': f'Không ghi được file vào thư mục xuất: {exc}'}), 500
+
+    return jsonify(export_file_payload(output_path))
+
+
+@app.route('/api/export/settings', methods=['GET', 'POST'])
+@role_required('teacher')
+def api_export_settings():
+    if request.method == 'GET':
+        try:
+            export_dir = get_user_export_dir()
+        except OSError as exc:
+            return jsonify({'success': False, 'message': f'Không mở được thư mục xuất: {exc}'}), 500
+        return jsonify({
+            'success': True,
+            'export_dir': str(export_dir),
+            'default_export_dir': str(get_default_export_dir()),
+        })
+
+    data = request.get_json(silent=True) or request.form
+    raw_path = str(data.get('export_dir') or '').strip()
+    if not raw_path:
+        return jsonify({'success': False, 'message': 'Vui lòng nhập thư mục xuất file.'}), 400
+
+    try:
+        export_dir = set_user_export_dir(raw_path)
+    except (OSError, ValueError) as exc:
+        return jsonify({'success': False, 'message': f'Không lưu được thư mục xuất: {exc}'}), 400
+
+    return jsonify({
+        'success': True,
+        'export_dir': str(export_dir),
+        'message': f'Đã đặt thư mục xuất file: {export_dir}',
+    })
+
+
+@app.route('/api/export/open-folder', methods=['POST'])
+@role_required('teacher')
+def api_open_export_folder():
+    try:
+        export_dir = get_user_export_dir()
+    except OSError as exc:
+        return jsonify({'success': False, 'message': f'Không mở được thư mục xuất: {exc}'}), 500
+
+    opened = False
+    if os.name == 'nt' and not app.config.get('TESTING'):
+        try:
+            os.startfile(str(export_dir))
+            opened = True
+        except OSError as exc:
+            return jsonify({'success': False, 'message': f'Không mở được thư mục xuất: {exc}'}), 500
+
+    return jsonify({
+        'success': True,
+        'opened': opened,
+        'directory': str(export_dir),
+        'message': 'Đã mở thư mục xuất.' if opened else f'Thư mục xuất: {export_dir}',
+    })
+
+
+@app.route('/api/export/current/<file_format>', methods=['POST'])
+@role_required('teacher')
+def api_export_current_exam(file_format):
+    tex_content = load_current_exam_tex()
+    if not tex_content:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề thi. Vui lòng tạo lại.'}), 404
+
+    filename = 'De_Thi_Giai_Tich.tex' if file_format == 'tex' else 'De_Thi_Giai_Tich.pdf'
+    return save_export_response(tex_content, filename, file_format)
+
+
+@app.route('/api/export/exam-bank/<int:exam_id>/<file_format>', methods=['POST'])
+@role_required('teacher')
+def api_export_exam_bank(exam_id, file_format):
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first()
+    if not item:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề trong ngân hàng.'}), 404
+
+    filename = f'exam_bank_{item.id}.{file_format}'
+    return save_export_response(item.combined_tex, filename, file_format)
+
+
+@app.route('/api/export/exam-bank/<int:exam_id>/variant/<int:variant_index>/<file_format>', methods=['POST'])
+@role_required('teacher')
+def api_export_exam_bank_variant(exam_id, variant_index, file_format):
+    item = ExamBank.query.filter_by(id=exam_id, teacher_id=current_user.id).first()
+    if not item:
+        return jsonify({'success': False, 'message': 'Không tìm thấy đề trong ngân hàng.'}), 404
+
+    variant = get_exam_bank_variant(item, variant_index)
+    if not variant:
+        return jsonify({'success': False, 'message': 'Không tìm thấy mã đề trong ngân hàng.'}), 404
+
+    seed = re.sub(r'[^a-zA-Z0-9_-]+', '_', str(variant.get('seed', variant_index + 1)))
+    filename = f'exam_bank_{item.id}_seed_{seed}.{file_format}'
+    return save_export_response(variant['content'], filename, file_format)
+
+
 def send_tex_download(tex_content, filename):
     return Response(
         tex_content,
@@ -4598,6 +4849,18 @@ def send_tex_download(tex_content, filename):
 
 
 def send_pdf_download(tex_content, filename):
+    pdf_bytes, compile_error = compile_tex_pdf_bytes(tex_content)
+    if compile_error:
+        flash(f'Không xuất được PDF: {compile_error}', 'danger')
+        return redirect(url_for('teacher_dashboard'))
+
+    return send_file(
+        __import__('io').BytesIO(pdf_bytes),
+        as_attachment=True,
+        download_name=filename,
+        mimetype='application/pdf',
+    )
+
     import tempfile
     import subprocess
     import io
@@ -4621,12 +4884,9 @@ def send_pdf_download(tex_content, filename):
             if not pdflatex_command:
                 flash('Không tìm thấy pdflatex. Hãy cài MiKTeX hoặc cấu hình LATEX_ENGINE trong file .env.', 'danger')
                 return redirect(url_for('teacher_dashboard'))
-            process = subprocess.run(
+            process = run_pdflatex_command(
                 [pdflatex_command, '-interaction=nonstopmode', 'exam.tex'],
                 cwd=tempdir,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True
             )
             if process.returncode != 0:
                 print('\n=== LATEX COMPILE ERROR ===')

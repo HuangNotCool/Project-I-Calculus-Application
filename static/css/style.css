@@ -79,6 +79,24 @@ footer {
     margin-bottom: 15px;
 }
 
+.exam-bank-topic-row {
+    min-width: 0;
+}
+
+.exam-bank-topic-badge {
+    display: -webkit-box;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: normal;
+    text-align: left;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
 /* --- DARK MODE --- */
 [data-bs-theme="dark"] body {
     background-color: #121212;

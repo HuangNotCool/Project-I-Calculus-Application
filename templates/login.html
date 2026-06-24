@@ -13,17 +13,6 @@
                     <p class="opacity-75">Đăng nhập để bắt đầu học tập</p>
                 </div>
 
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible fade show rounded-3 border-0 shadow-sm text-start" role="alert">
-                                <i class="fa-solid fa-circle-exclamation me-2"></i>{{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
-
                 <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}" class="position-relative z-1">
                     <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">

@@ -38,6 +38,28 @@ def test_teacher_dashboard_loads_local_codemirror(client, seeded_course):
     assert b'cdnjs.cloudflare.com' not in response.data
 
 
+def test_exam_bank_topic_badge_wraps_long_content(client, seeded_course):
+    login_as(client, seeded_course['teacher_id'])
+    response = client.get('/teacher-dashboard')
+    stylesheet = client.get('/static/css/style.css')
+
+    assert response.status_code == 200
+    assert b'exam-bank-topic-badge' in response.data
+    assert b'overflow-wrap: anywhere' in stylesheet.data
+    assert b'-webkit-line-clamp: 2' in stylesheet.data
+    assert b'white-space: normal' in stylesheet.data
+
+
+def test_custom_exam_mode_uses_expanded_workspace(client, seeded_course):
+    login_as(client, seeded_course['teacher_id'])
+    response = client.get('/teacher-dashboard')
+
+    assert response.status_code == 200
+    assert b"document.getElementById('sidebarMenu').classList.add('d-none')" in response.data
+    assert b"document.getElementById('mainWorkspace').classList.replace('col-lg-9', 'col-lg-12')" in response.data
+    assert b"document.getElementById('examCardHeader').classList.add('d-none')" in response.data
+
+
 def test_required_vendor_assets_are_served(client):
     assets = (
         'vendor/bootstrap/css/bootstrap.min.css',

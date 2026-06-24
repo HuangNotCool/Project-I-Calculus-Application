@@ -444,7 +444,7 @@
                                                         <i class="fa-solid fa-shield-halved me-2"></i>Kiểm tra thông minh
                                                     </button>
                                                     <button type="button" id="btnGenerateBulk" onclick="generateBulkExam()" class="btn btn-success px-4 py-2 rounded-pill fw-bold shadow hover-lift w-100" disabled>
-                                                        <i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất
+                                                        <i class="fa-solid fa-box-archive me-2"></i>Thêm vào ngân hàng
                                                     </button>
                                                 </div>
                                             </div>
@@ -456,15 +456,27 @@
                         </div>
                     </div>
                     
-                    <div class="card-footer bg-transparent border-top border-secondary-subtle p-4 d-flex justify-content-end gap-3 rounded-bottom-4">
-                        <a href="/download/tex" id="btnExportTex"
-                            class="btn btn-outline-primary fw-bold rounded-pill px-4 shadow-sm disabled">
-                            <i class="fa-solid fa-file-code me-2"></i>Xuất .TEX
-                        </a>
-                        <a href="/download/pdf" id="btnExportPdf" data-pdf-download data-tex-target="btnExportTex"
-                            class="btn btn-primary fw-bold rounded-pill px-4 shadow disabled">
-                            <i class="fa-solid fa-file-pdf me-2"></i>Lưu & Xuất .PDF
-                        </a>
+                    <div class="card-footer bg-transparent border-top border-secondary-subtle p-4 d-flex flex-wrap justify-content-between align-items-center gap-3 rounded-bottom-4">
+                        <div class="small text-muted d-flex flex-wrap align-items-center gap-2">
+                            <i class="fa-solid fa-folder-open text-primary"></i>
+                            <span>Thư mục xuất: <span id="exportDirectoryLabel" class="fw-bold text-body">{{ export_dir }}</span></span>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill" onclick="openExportSettingsModal()">
+                                <i class="fa-solid fa-gear me-1"></i>Đổi
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill" onclick="openExportFolder()">
+                                <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Mở thư mục
+                            </button>
+                        </div>
+                        <div class="d-flex flex-wrap justify-content-end gap-3">
+                            <a href="/download/tex" id="btnExportTex" data-file-download data-save-url="/api/export/current/tex" data-download-fallback="De_Thi_Giai_Tich.tex"
+                                class="btn btn-outline-primary fw-bold rounded-pill px-4 shadow-sm disabled">
+                                <i class="fa-solid fa-file-code me-2"></i>Xuất .TEX
+                            </a>
+                            <a href="/download/pdf" id="btnExportPdf" data-pdf-download data-save-url="/api/export/current/pdf" data-tex-target="btnExportTex"
+                                class="btn btn-primary fw-bold rounded-pill px-4 shadow disabled">
+                                <i class="fa-solid fa-file-pdf me-2"></i>Lưu & Xuất .PDF
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -475,7 +487,7 @@
                         <div class="d-flex justify-content-between align-items-center gap-3">
                             <div>
                                 <h4 class="mb-1 fw-bold text-primary"><i class="fa-solid fa-database me-2"></i>Ngân hàng đề thi</h4>
-                                <p class="text-muted small mb-0">Các đề đã bấm Chốt Đề & Chuẩn Bị Xuất sẽ được lưu ở đây.</p>
+                                <p class="text-muted small mb-0">Các đề đã thêm vào ngân hàng sẽ được lưu ở đây.</p>
                             </div>
                             <button type="button" class="btn btn-outline-primary rounded-pill fw-bold px-4" onclick="loadExamBankPage()">
                                 <i class="fa-solid fa-rotate-right me-2"></i>Làm mới
@@ -625,7 +637,7 @@
                                     <select id="assignBankExamSelect" class="form-select bg-body border-0 rounded-3 py-2 mb-2" onchange="loadSelectedBankExamVariants()"></select>
                                     <label class="form-label fw-bold small">Mã đề</label>
                                     <select id="assignBankVariantSelect" class="form-select bg-body border-0 rounded-3 py-2"></select>
-                                    <small class="text-muted d-block mt-1">Ngân hàng được tạo khi bấm Chốt Đề & Chuẩn Bị Xuất.</small>
+                                    <small class="text-muted d-block mt-1">Đề được giao từ ngân hàng đề thi.</small>
                                 </div>
                                 <div class="row g-3 mb-3">
                                     <div class="col-md-6">
@@ -923,10 +935,10 @@
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                     <div class="small text-muted">Xem lại từng mã đề đã lưu trong ngân hàng.</div>
                     <div class="d-flex flex-wrap gap-2">
-                        <a id="examBankDetailDownloadTex" href="#" class="btn btn-sm btn-outline-primary rounded-pill fw-bold">
+                        <a id="examBankDetailDownloadTex" href="#" data-file-download data-save-url="" data-download-fallback="de_thi_ngan_hang.tex" class="btn btn-sm btn-outline-primary rounded-pill fw-bold">
                             <i class="fa-solid fa-file-code me-1"></i>Tải TEX toàn bộ
                         </a>
-                        <a id="examBankDetailDownloadPdf" href="#" data-pdf-download data-tex-target="examBankDetailDownloadTex" class="btn btn-sm btn-primary rounded-pill fw-bold">
+                        <a id="examBankDetailDownloadPdf" href="#" data-pdf-download data-save-url="" data-tex-target="examBankDetailDownloadTex" class="btn btn-sm btn-primary rounded-pill fw-bold">
                             <i class="fa-solid fa-file-pdf me-1"></i>Tải PDF toàn bộ
                         </a>
                     </div>
@@ -945,10 +957,10 @@
                             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                                 <div class="fw-bold text-primary" id="examBankSelectedVariantTitle">Preview mã đề</div>
                                 <div class="d-flex flex-wrap gap-2">
-                                    <a id="examBankVariantDownloadTex" href="#" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold">
+                                    <a id="examBankVariantDownloadTex" href="#" data-file-download data-save-url="" data-download-fallback="ma_de_ngan_hang.tex" class="btn btn-sm btn-outline-secondary rounded-pill fw-bold">
                                         <i class="fa-solid fa-file-code me-1"></i>TEX mã này
                                     </a>
-                                    <a id="examBankVariantDownloadPdf" href="#" data-pdf-download data-tex-target="examBankVariantDownloadTex" class="btn btn-sm btn-outline-danger rounded-pill fw-bold">
+                                    <a id="examBankVariantDownloadPdf" href="#" data-pdf-download data-save-url="" data-tex-target="examBankVariantDownloadTex" class="btn btn-sm btn-outline-danger rounded-pill fw-bold">
                                         <i class="fa-solid fa-file-pdf me-1"></i>PDF mã này
                                     </a>
                                     <button type="button" class="btn btn-sm btn-success rounded-pill fw-bold" onclick="assignCurrentBankVariant()">
@@ -990,7 +1002,7 @@
             </div>
             <div class="modal-footer border-top-0 px-4 pb-4 pt-0 d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
-                <a id="miktexTexFallback" href="/download/tex" class="btn btn-outline-primary">
+                <a id="miktexTexFallback" href="/download/tex" data-file-download data-save-url="/api/export/current/tex" data-download-fallback="De_Thi_Giai_Tich.tex" class="btn btn-outline-primary">
                     <i class="fa-solid fa-file-code me-1"></i>Xuất TEX
                 </a>
                 <button type="button" id="btnRetryLatexDetection" class="btn btn-outline-success" onclick="retryPendingPdfDownload()">
@@ -999,6 +1011,38 @@
                 <a href="https://miktex.org/download" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
                     <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Tải MiKTeX
                 </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="exportSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg bg-body">
+            <div class="modal-header border-bottom-0 px-4 pt-4 pb-0">
+                <div>
+                    <h4 class="modal-title fw-bold text-primary mb-1">
+                        <i class="fa-solid fa-folder-open me-2"></i>Thư mục xuất file
+                    </h4>
+                    <p class="text-muted small mb-0">TEX/PDF sẽ được lưu thẳng vào thư mục này khi xuất từ ứng dụng.</p>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+            </div>
+            <div class="modal-body px-4 py-4">
+                <label class="form-label fw-bold small text-muted">Đường dẫn thư mục</label>
+                <input type="text" id="exportDirectoryInput" class="form-control bg-body-tertiary border-0 py-2"
+                    value="{{ export_dir }}" placeholder="VD: D:\DeThiGiaiTich">
+                <div class="form-text">Nếu thư mục chưa tồn tại, ứng dụng sẽ tự tạo khi lưu.</div>
+                <div id="exportSettingsAlert" class="alert d-none small border-0 mt-3 mb-0"></div>
+            </div>
+            <div class="modal-footer border-top-0 px-4 pb-4 pt-0 d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="button" class="btn btn-outline-primary" onclick="openExportFolder()">
+                    <i class="fa-solid fa-arrow-up-right-from-square me-1"></i>Mở thư mục hiện tại
+                </button>
+                <button type="button" id="btnSaveExportDirectory" class="btn btn-primary" onclick="saveExportDirectory()">
+                    <i class="fa-solid fa-floppy-disk me-1"></i>Lưu thư mục
+                </button>
             </div>
         </div>
     </div>
@@ -1175,7 +1219,7 @@
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tạo...';
         btn.disabled = true;
         fetch('/api/teacher/create-class', { method: 'POST', body: formData })
-            .then(res => res.json()).then(data => { if (data.success) location.reload(); else { alert("Lỗi: " + data.message); btn.innerHTML = originalText; btn.disabled = false; } })
+            .then(res => res.json()).then(data => { if (data.success) { window.location.hash = 'tab-class-management'; location.reload(); } else { alert("Lỗi: " + data.message); btn.innerHTML = originalText; btn.disabled = false; } })
             .catch(err => { alert("Lỗi kết nối máy chủ!"); btn.innerHTML = originalText; btn.disabled = false; });
     }
 
@@ -1410,7 +1454,7 @@
                         <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
                             <i class="fa-solid fa-database fs-1 text-muted opacity-50 mb-3"></i>
                             <h5 class="fw-bold text-body">Ngân hàng đề thi đang trống</h5>
-                            <p class="text-muted small mb-0">Sau khi bấm Chốt Đề & Chuẩn Bị Xuất, đề sẽ xuất hiện ở đây.</p>
+                            <p class="text-muted small mb-0">Sau khi thêm vào ngân hàng, đề sẽ xuất hiện ở đây.</p>
                         </div>`;
                     return;
                 }
@@ -1428,7 +1472,7 @@
                                     </div>
                                     <h5 class="fw-bold text-body mb-2">${escapeHtml(exam.title)}</h5>
                                     <div class="small text-muted mb-1"><i class="fa-solid fa-list-ol me-1"></i>${exam.total_questions || 0} câu mỗi mã đề</div>
-                                    <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Chốt lúc: ${escapeHtml(exam.created_at || '-')}</div>
+                                    <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Thêm lúc: ${escapeHtml(exam.created_at || '-')}</div>
                                     ${exam.description ? `<p class="small text-muted mb-4">${escapeHtml(exam.description)}</p>` : ''}
                                     <div class="d-flex gap-2 mt-auto">
                                         <button type="button" class="btn btn-outline-primary rounded-pill fw-bold flex-grow-1" onclick="openExamBankDetail(${exam.id})">
@@ -1471,7 +1515,7 @@
                 <div class="col-12 text-center py-5 bg-body-tertiary rounded-4 shadow-sm">
                     <i class="fa-solid fa-database fs-1 text-muted opacity-50 mb-3"></i>
                     <h5 class="fw-bold text-body">Ngân hàng đề thi đang trống</h5>
-                    <p class="text-muted small mb-0">Sau khi bấm Chốt Đề & Chuẩn Bị Xuất, đề sẽ xuất hiện ở đây.</p>
+                    <p class="text-muted small mb-0">Sau khi thêm vào ngân hàng, đề sẽ xuất hiện ở đây.</p>
                 </div>`;
             return;
         }
@@ -1497,12 +1541,12 @@
                             <span class="badge bg-primary-subtle text-primary border rounded-pill">${exam.total_variants} mã đề</span>
                         </div>
                         <h5 class="fw-bold text-body mb-2">${escapeHtml(exam.title)}</h5>
-                        <div class="d-flex flex-wrap gap-2 mb-3">
+                        <div class="d-flex flex-wrap gap-2 mb-3 exam-bank-topic-row">
                             ${exam.week_number ? `<span class="badge bg-warning-subtle text-warning-emphasis border rounded-pill">Tuần ${escapeHtml(exam.week_number)}</span>` : ''}
-                            ${exam.topic ? `<span class="badge bg-success-subtle text-success-emphasis border rounded-pill">${escapeHtml(exam.topic)}</span>` : ''}
+                            ${exam.topic ? `<span class="badge bg-success-subtle text-success-emphasis border rounded-pill exam-bank-topic-badge" title="${escapeHtml(exam.topic)}">${escapeHtml(exam.topic)}</span>` : ''}
                         </div>
                         <div class="small text-muted mb-1"><i class="fa-solid fa-list-ol me-1"></i>${exam.total_questions || 0} câu mỗi mã đề</div>
-                        <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Chốt lúc: ${escapeHtml(exam.created_at || '-')}</div>
+                        <div class="small text-muted mb-3"><i class="fa-regular fa-clock me-1"></i>Thêm lúc: ${escapeHtml(exam.created_at || '-')}</div>
                         ${exam.description ? `<p class="small text-muted mb-4">${escapeHtml(exam.description)}</p>` : ''}
                         <div class="d-flex flex-wrap gap-2 mt-auto">
                             <button type="button" class="btn btn-outline-primary rounded-pill fw-bold flex-grow-1" onclick="openExamBankDetail(${exam.id})">
@@ -1533,6 +1577,8 @@
         document.getElementById('examBankDetailPreview').innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin me-2"></i>Đang tải preview...</div>';
         document.getElementById('examBankDetailDownloadTex').href = `/download/exam-bank/${examId}/tex`;
         document.getElementById('examBankDetailDownloadPdf').href = `/download/exam-bank/${examId}/pdf`;
+        document.getElementById('examBankDetailDownloadTex').dataset.saveUrl = `/api/export/exam-bank/${examId}/tex`;
+        document.getElementById('examBankDetailDownloadPdf').dataset.saveUrl = `/api/export/exam-bank/${examId}/pdf`;
 
         const modal = new bootstrap.Modal(document.getElementById('examBankDetailModal'));
         modal.show();
@@ -1554,7 +1600,7 @@
                 }
 
                 document.getElementById('examBankDetailTitle').textContent = data.exam.title || 'Chi tiết đề';
-                document.getElementById('examBankDetailMeta').textContent = `${data.exam.total_variants || 0} mã đề • ${data.exam.total_questions || 0} câu mỗi mã • Chốt lúc ${data.exam.created_at || '-'}`;
+                document.getElementById('examBankDetailMeta').textContent = `${data.exam.total_variants || 0} mã đề • ${data.exam.total_questions || 0} câu mỗi mã • Thêm lúc ${data.exam.created_at || '-'}`;
                 renderExamBankVariantList();
                 selectExamBankVariant(currentBankDetailVariantIndex);
             })
@@ -1596,6 +1642,8 @@
         document.getElementById('examBankSelectedVariantTitle').textContent = `Preview mã đề: Seed ${variant.seed}`;
         document.getElementById('examBankVariantDownloadTex').href = `/download/exam-bank/${examId}/variant/${safeIndex}/tex`;
         document.getElementById('examBankVariantDownloadPdf').href = `/download/exam-bank/${examId}/variant/${safeIndex}/pdf`;
+        document.getElementById('examBankVariantDownloadTex').dataset.saveUrl = `/api/export/exam-bank/${examId}/variant/${safeIndex}/tex`;
+        document.getElementById('examBankVariantDownloadPdf').dataset.saveUrl = `/api/export/exam-bank/${examId}/variant/${safeIndex}/pdf`;
         renderBankVariantPreview(variant);
     }
 
@@ -1744,7 +1792,7 @@
                 if (currentBankDetailExam && Number(currentBankDetailExam.id) === Number(updated.id)) {
                     currentBankDetailExam = { ...currentBankDetailExam, ...updated };
                     document.getElementById('examBankDetailTitle').textContent = currentBankDetailExam.title || 'Chi tiết đề';
-                    document.getElementById('examBankDetailMeta').textContent = `${currentBankDetailExam.total_variants || 0} mã đề • ${currentBankDetailExam.total_questions || 0} câu mỗi mã • Chốt lúc ${currentBankDetailExam.created_at || '-'}`;
+                    document.getElementById('examBankDetailMeta').textContent = `${currentBankDetailExam.total_variants || 0} mã đề • ${currentBankDetailExam.total_questions || 0} câu mỗi mã • Thêm lúc ${currentBankDetailExam.created_at || '-'}`;
                 }
                 renderExamBankPageList();
                 const modal = bootstrap.Modal.getInstance(document.getElementById('editExamBankModal'));
@@ -3292,13 +3340,13 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         })
             .then(res => res.json())
             .then(data => {
-                btn.innerHTML = '<i class="fa-solid fa-layer-group me-2"></i>Chốt Đề & Chuẩn Bị Xuất';
+                btn.innerHTML = '<i class="fa-solid fa-box-archive me-2"></i>Thêm vào ngân hàng';
                 btn.disabled = false;
                 if (data.success) {
                     const bankText = data.bank_exam
                         ? ` Đã lưu vào ngân hàng đề thi: <strong>${escapeHtml(data.bank_exam.title)}</strong>.`
                         : '';
-                    alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i>Đã chốt đề xong.${bankText} Bạn có thể xuất file hoặc giao từ ngân hàng đề.`;
+                    alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i>Đã thêm đề vào ngân hàng.${bankText} Bạn có thể xuất file hoặc giao từ ngân hàng đề.`;
                     alertBox.classList.remove('d-none');
                     btnTex.classList.remove('disabled');
                     btnPdf.classList.remove('disabled');
@@ -3618,11 +3666,11 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 }
                 btn.innerHTML = '<i class="fa-solid fa-circle-check me-2"></i>Đã lưu vào ngân hàng';
                 const alertBox = document.getElementById('successAlert');
-                alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i><strong>Đã chốt đề.</strong> ${escapeHtml(data.bank_exam?.title || '')} hiện đã có trong ngân hàng đề thi.`;
+                alertBox.innerHTML = `<i class="fa-solid fa-circle-check me-2"></i><strong>Đã thêm vào ngân hàng.</strong> ${escapeHtml(data.bank_exam?.title || '')} hiện đã có trong ngân hàng đề thi.`;
                 alertBox.classList.remove('d-none');
             })
             .catch(() => {
-                alert('Lỗi kết nối khi chốt đề.');
+                alert('Lỗi kết nối khi thêm đề vào ngân hàng.');
                 btn.disabled = false;
                 btn.innerHTML = originalText;
             });
@@ -3651,7 +3699,149 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
         }
     }
 
+    function showExamToast(message, type = 'info') {
+        let container = document.getElementById('examDownloadToastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'examDownloadToastContainer';
+            container.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+            container.style.zIndex = '1090';
+            document.body.appendChild(container);
+        }
+
+        const toastEl = document.createElement('div');
+        const icon = type === 'success' ? 'fa-circle-check' : (type === 'danger' ? 'fa-circle-xmark' : 'fa-circle-info');
+        const color = type === 'success' ? 'text-success' : (type === 'danger' ? 'text-danger' : 'text-primary');
+        toastEl.className = 'toast align-items-center border-0 shadow';
+        toastEl.setAttribute('role', 'status');
+        toastEl.setAttribute('aria-live', 'polite');
+        toastEl.setAttribute('aria-atomic', 'true');
+        toastEl.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fa-solid ${icon} ${color} me-2"></i>${escapeHtml(message)}
+                </div>
+                <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>`;
+        container.appendChild(toastEl);
+
+        const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4500 });
+        toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove());
+        toast.show();
+    }
+
+    function filenameFromDisposition(disposition, fallback) {
+        const value = disposition || '';
+        const utfMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+        if (utfMatch) {
+            try { return decodeURIComponent(utfMatch[1].replace(/"/g, '').trim()); } catch (_) {}
+        }
+        const asciiMatch = value.match(/filename="?([^";]+)"?/i);
+        if (asciiMatch) return asciiMatch[1].trim();
+        return fallback || 'download';
+    }
+
+    async function downloadFileFromUrl(url, fallbackFilename) {
+        showExamToast('Đang chuẩn bị file tải xuống...', 'info');
+        const response = await fetch(url, {
+            headers: { 'X-Requested-With': 'download-fetch' },
+            redirect: 'follow'
+        });
+        const disposition = response.headers.get('content-disposition') || '';
+        if (!response.ok || !/attachment/i.test(disposition)) {
+            throw new Error('Không tải được file. Vui lòng tạo lại đề hoặc kiểm tra thông báo trên trang.');
+        }
+
+        const blob = await response.blob();
+        const filename = filenameFromDisposition(disposition, fallbackFilename);
+        const objectUrl = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 3000);
+        showExamToast(`Đã gửi ${filename} vào trình duyệt. Thường nằm trong thư mục Downloads.`, 'success');
+    }
+
+    function updateExportDirectoryLabel(directory) {
+        const label = document.getElementById('exportDirectoryLabel');
+        if (label && directory) label.textContent = directory;
+        const input = document.getElementById('exportDirectoryInput');
+        if (input && directory) input.value = directory;
+    }
+
+    function openExportSettingsModal() {
+        document.getElementById('exportSettingsAlert').className = 'alert d-none small border-0 mt-3 mb-0';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('exportSettingsModal')).show();
+    }
+
+    async function saveExportDirectory() {
+        const input = document.getElementById('exportDirectoryInput');
+        const alertBox = document.getElementById('exportSettingsAlert');
+        const button = document.getElementById('btnSaveExportDirectory');
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Đang lưu';
+        alertBox.className = 'alert d-none small border-0 mt-3 mb-0';
+        try {
+            const response = await fetch('/api/export/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ export_dir: input.value.trim() })
+            });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Không lưu được thư mục xuất.');
+            }
+            updateExportDirectoryLabel(data.export_dir);
+            alertBox.className = 'alert alert-success small border-0 mt-3 mb-0';
+            alertBox.textContent = data.message || 'Đã lưu thư mục xuất.';
+            showExamToast('Đã cập nhật thư mục xuất file.', 'success');
+        } catch (error) {
+            alertBox.className = 'alert alert-danger small border-0 mt-3 mb-0';
+            alertBox.textContent = error.message || 'Không lưu được thư mục xuất.';
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    }
+
+    async function openExportFolder() {
+        try {
+            const response = await fetch('/api/export/open-folder', { method: 'POST' });
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Không mở được thư mục xuất.');
+            }
+            updateExportDirectoryLabel(data.directory);
+            showExamToast(data.opened ? 'Đã mở thư mục xuất.' : data.message, 'success');
+        } catch (error) {
+            showExamToast(error.message || 'Không mở được thư mục xuất.', 'danger');
+        }
+    }
+
+    async function saveFileToExportFolder(saveUrl) {
+        showExamToast('Đang lưu file vào thư mục xuất...', 'info');
+        const response = await fetch(saveUrl, { method: 'POST' });
+        let data = {};
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = {};
+        }
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Không lưu được file.');
+        }
+        updateExportDirectoryLabel(data.directory);
+        showExamToast(`Đã lưu ${data.filename || 'file'} tại ${data.path || data.directory}.`, 'success');
+        return data;
+    }
+
     let pendingPdfDownloadUrl = '';
+    let pendingPdfExportUrl = '';
 
     async function fetchLatexStatus() {
         const response = await fetch(`/api/system/latex-status?_=${Date.now()}`, {
@@ -3666,20 +3856,28 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
 
     async function requestPdfDownload(pdfLink) {
         pendingPdfDownloadUrl = pdfLink.href;
+        pendingPdfExportUrl = pdfLink.dataset.saveUrl || '';
         const texTarget = document.getElementById(pdfLink.dataset.texTarget || 'btnExportTex');
         const texFallback = document.getElementById('miktexTexFallback');
-        if (texTarget && texFallback) texFallback.href = texTarget.href;
+        if (texTarget && texFallback) {
+            texFallback.href = texTarget.href;
+            texFallback.dataset.saveUrl = texTarget.dataset.saveUrl || '';
+        }
 
         try {
             const status = await fetchLatexStatus();
             if (status.available) {
-                window.location.href = pendingPdfDownloadUrl;
+                if (pendingPdfExportUrl) {
+                    await saveFileToExportFolder(pendingPdfExportUrl);
+                } else {
+                    await downloadFileFromUrl(pendingPdfDownloadUrl, 'De_Thi_Giai_Tich.pdf');
+                }
                 return;
             }
             document.getElementById('miktexStatusMessage').classList.add('d-none');
             bootstrap.Modal.getOrCreateInstance(document.getElementById('miktexRequiredModal')).show();
         } catch (error) {
-            alert(error.message || 'Không kiểm tra được trạng thái MiKTeX.');
+            showExamToast(error.message || 'Không kiểm tra được trạng thái MiKTeX.', 'danger');
         }
     }
 
@@ -3695,7 +3893,11 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
                 message.className = 'alert alert-success border-0 small mt-3 mb-0';
                 message.textContent = status.message;
                 bootstrap.Modal.getInstance(document.getElementById('miktexRequiredModal'))?.hide();
-                if (pendingPdfDownloadUrl) window.location.href = pendingPdfDownloadUrl;
+                if (pendingPdfExportUrl) {
+                    await saveFileToExportFolder(pendingPdfExportUrl);
+                } else if (pendingPdfDownloadUrl) {
+                    await downloadFileFromUrl(pendingPdfDownloadUrl, 'De_Thi_Giai_Tich.pdf');
+                }
                 return;
             }
             message.className = 'alert alert-warning border-0 small mt-3 mb-0';
@@ -3710,8 +3912,28 @@ $ I = @a@ \\sin\\left(\\frac{\\pi}{2}\\right) - @a@ \\sin(0) = @a@(1) - @a@(0) =
     }
 
     document.addEventListener('click', function (event) {
+        const disabledDownloadLink = event.target.closest('a.disabled[data-file-download], a.disabled[data-pdf-download]');
+        if (disabledDownloadLink) {
+            event.preventDefault();
+            showExamToast('Hãy sinh hoặc thêm đề vào ngân hàng trước khi xuất file.', 'info');
+            return;
+        }
+
+        const fileLink = event.target.closest('a[data-file-download]');
+        if (fileLink) {
+            event.preventDefault();
+            if (fileLink.dataset.saveUrl) {
+                saveFileToExportFolder(fileLink.dataset.saveUrl)
+                    .catch((error) => showExamToast(error.message || 'Không lưu được file.', 'danger'));
+            } else {
+                downloadFileFromUrl(fileLink.href, fileLink.dataset.downloadFallback || 'download')
+                    .catch((error) => showExamToast(error.message || 'Không tải được file.', 'danger'));
+            }
+            return;
+        }
+
         const pdfLink = event.target.closest('a[data-pdf-download]');
-        if (!pdfLink || pdfLink.classList.contains('disabled')) return;
+        if (!pdfLink) return;
         event.preventDefault();
         requestPdfDownload(pdfLink);
     });

@@ -8,6 +8,17 @@
     </div>
 
     {% if current_user.role == 'student' %}
+    <section id="quick-start" class="mb-5">
+        <div class="bg-primary bg-opacity-10 border border-primary border-opacity-10 rounded-3 p-4">
+            <h3 class="h5 fw-bold text-primary mb-3"><i class="fa-solid fa-route me-2"></i>Bắt đầu nhanh</h3>
+            <div class="row g-3">
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>1. Hoàn thiện hồ sơ</strong><div class="small text-muted mt-1">Kiểm tra họ tên, trường, ngành và mã số sinh viên trong trang cá nhân.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>2. Vào lớp bằng mã</strong><div class="small text-muted mt-1">Nhập mã lớp giáo viên cung cấp, sau đó chờ duyệt nếu lớp bật chế độ duyệt.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>3. Làm bài được giao</strong><div class="small text-muted mt-1">Mở mục Thi &amp; Luyện thi, đọc thời hạn và hoàn thành bài trước khi hết giờ.</div></div></div>
+            </div>
+        </div>
+    </section>
+
     <section id="student-guide" class="border-top pt-4 mb-5">
         <h3 class="h5 fw-bold mb-3">Học tập và làm bài</h3>
         <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
@@ -19,6 +30,17 @@
         <a href="{{ url_for('student_dashboard') }}" class="btn btn-primary rounded-pill px-4 mt-3">Về trang học tập</a>
     </section>
     {% elif current_user.role == 'teacher' %}
+    <section id="quick-start" class="mb-5">
+        <div class="bg-primary bg-opacity-10 border border-primary border-opacity-10 rounded-3 p-4">
+            <h3 class="h5 fw-bold text-primary mb-3"><i class="fa-solid fa-route me-2"></i>Bắt đầu nhanh</h3>
+            <div class="row g-3">
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>1. Tạo lớp</strong><div class="small text-muted mt-1">Chọn chế độ vào tự do bằng mã hoặc phải duyệt từng sinh viên.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>2. Sinh và lưu đề</strong><div class="small text-muted mt-1">Sinh đề, kiểm tra preview, rồi thêm đề đạt yêu cầu vào ngân hàng đề thi.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>3. Giao từ ngân hàng</strong><div class="small text-muted mt-1">Chỉ giao đề từ ngân hàng để bảo đảm đề đã được chốt và có thể xem lại.</div></div></div>
+            </div>
+        </div>
+    </section>
+
     <section id="teacher-guide" class="border-top pt-4 mb-5">
         <h3 class="h5 fw-bold mb-3">Sinh đề và quản lý lớp</h3>
         <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
@@ -26,10 +48,22 @@
             <li class="list-group-item p-3">Kiểm tra các seed đang xem, sau đó thêm bản đã chốt vào <strong>Ngân hàng đề thi</strong>.</li>
             <li class="list-group-item p-3">Tạo lớp, chọn chính sách tham gia và chia sẻ mã lớp cho sinh viên.</li>
             <li class="list-group-item p-3">Giao đề từ ngân hàng, đặt thời gian và chính sách kết quả, sau đó theo dõi bài nộp trong trang quản lý lớp.</li>
+            <li class="list-group-item p-3">Trong khu vực xuất file, chọn <strong>Thư mục xuất</strong> để TEX/PDF được lưu thẳng vào thư mục mong muốn.</li>
         </ol>
         <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-primary rounded-pill px-4 mt-3">Về trang giảng viên</a>
     </section>
     {% else %}
+    <section id="quick-start" class="mb-5">
+        <div class="bg-primary bg-opacity-10 border border-primary border-opacity-10 rounded-3 p-4">
+            <h3 class="h5 fw-bold text-primary mb-3"><i class="fa-solid fa-route me-2"></i>Bắt đầu nhanh</h3>
+            <div class="row g-3">
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>1. Đăng nhập admin</strong><div class="small text-muted mt-1">Admin là tài khoản quản trị mặc định dùng để duyệt giáo viên.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>2. Duyệt giáo viên</strong><div class="small text-muted mt-1">Chỉ tài khoản giáo viên được duyệt mới vào được trang giảng viên.</div></div></div>
+                <div class="col-md-4"><div class="bg-body rounded-3 shadow-sm p-3 h-100"><strong>3. Sao lưu dữ liệu</strong><div class="small text-muted mt-1">Tải bản sao database trước khi reset máy, chuyển máy hoặc nộp bản demo.</div></div></div>
+            </div>
+        </div>
+    </section>
+
     <section id="admin-guide" class="border-top pt-4 mb-5">
         <h3 class="h5 fw-bold mb-3">Duyệt tài khoản và bảo vệ dữ liệu</h3>
         <ol class="list-group list-group-numbered list-group-flush shadow-sm rounded-2 overflow-hidden">
@@ -46,7 +80,9 @@
         <h3 class="h5 fw-bold mb-3">Thông tin chung</h3>
         <div class="row g-3">
             <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Hồ sơ cá nhân</strong><div class="small text-muted mt-1">Chỉnh sửa họ tên hiển thị, tên đăng nhập và đổi mật khẩu trong biểu tượng hồ sơ trên thanh điều hướng.</div></div></div>
-            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Xuất PDF</strong><div class="small text-muted mt-1">Cần cài MiKTeX. Nếu chưa có, ứng dụng vẫn cho phép tải mã nguồn TEX.</div></div></div>
+            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Xuất file</strong><div class="small text-muted mt-1">TEX lưu trực tiếp vào thư mục xuất đã chọn. PDF cần MiKTeX; nếu chưa có, ứng dụng vẫn cho phép xuất TEX.</div></div></div>
+            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Dữ liệu local</strong><div class="small text-muted mt-1">Ứng dụng chạy trên máy hiện tại, dữ liệu được lưu cục bộ và không cần Internet cho các chức năng chính.</div></div></div>
+            <div class="col-md-6"><div class="bg-body shadow-sm rounded-2 p-3 h-100"><strong>Khi chuyển máy</strong><div class="small text-muted mt-1">Cần sao lưu database từ trang quản trị hoặc giữ nguyên thư mục dữ liệu ứng dụng.</div></div></div>
         </div>
     </section>
 </div>

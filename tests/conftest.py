@@ -17,15 +17,21 @@ from models import Assignment, Class, User, db
 
 
 TEST_CURRENT_EXAM_DIR = Path(tempfile.gettempdir()) / 'giaitich_app_pytest_current_exams'
+TEST_EXPORT_DIR = Path(tempfile.gettempdir()) / 'giaitich_app_pytest_exports'
+TEST_EXPORT_SETTINGS_PATH = Path(tempfile.gettempdir()) / 'giaitich_app_pytest_export_settings.json'
 
 
 @pytest.fixture()
 def app():
     shutil.rmtree(TEST_CURRENT_EXAM_DIR, ignore_errors=True)
+    shutil.rmtree(TEST_EXPORT_DIR, ignore_errors=True)
+    TEST_EXPORT_SETTINGS_PATH.unlink(missing_ok=True)
     app_module.app.config.update(
         TESTING=True,
         SQLALCHEMY_DATABASE_URI='sqlite:///pytest.db',
         CURRENT_EXAM_DIR=str(TEST_CURRENT_EXAM_DIR),
+        DEFAULT_EXPORT_DIR=str(TEST_EXPORT_DIR),
+        EXPORT_SETTINGS_PATH=str(TEST_EXPORT_SETTINGS_PATH),
         PDF_QUALITY_GATE=False
     )
     app_module._rate_limit_events.clear()
@@ -37,6 +43,8 @@ def app():
         db.session.remove()
         db.drop_all()
     shutil.rmtree(TEST_CURRENT_EXAM_DIR, ignore_errors=True)
+    shutil.rmtree(TEST_EXPORT_DIR, ignore_errors=True)
+    TEST_EXPORT_SETTINGS_PATH.unlink(missing_ok=True)
 
 
 @pytest.fixture()
